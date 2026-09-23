@@ -138,7 +138,7 @@ function stopPreview(){state.playing=false;clearInterval(state.timer);state.time
 function playPreview(){
  if(!state.notes.length)return;stopPreview();state.playing=true;$('#playPreview').textContent='Ⅱ';
  const Ctx=window.AudioContext||window.webkitAudioContext;if(!Ctx){alert('Web Audio indisponible dans ce navigateur.');stopPreview();return}
- const ctx=new Ctx();state.ctx=ctx,bpm=+$('#bpm').value;const secTick=60/bpm/480,total=+$('#bars').value*1920,start=performance.now(),now=ctx.currentTime+.05;
+ const ctx=new Ctx();state.ctx=ctx;const bpm=+$('#bpm').value;const secTick=60/bpm/480,total=+$('#bars').value*1920,start=performance.now(),now=ctx.currentTime+.05;
  for(const n of state.notes){
    const osc=ctx.createOscillator(),gain=ctx.createGain(),when=now+n.t*secTick,dur=Math.max(.035,n.d*secTick);
    let freq=440*Math.pow(2,(n.p-69)/12);
