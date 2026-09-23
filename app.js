@@ -36,7 +36,174 @@ function chooseScale(style,mood){if(style==='Hard Techno')return[0,1,3,4,7,8,10]
 function sectionFor(bar,bars){const x=bar/bars;if(x<.125)return'intro';if(x<.375)return'verse';if(x<.625)return'hook';if(x<.875)return'verse2';return'outro'}
 function analyzeReference(buffer){const rate=buffer.sampleRate,frames=buffer.length,step=Math.max(1,Math.floor(rate/16000)),sample=new Float32Array(Math.ceil(frames/step));for(let i=0,j=0;i<frames;i+=step,j++){let v=0;for(let ch=0;ch<buffer.numberOfChannels;ch++)v+=buffer.getChannelData(ch)[i]||0;sample[j]=v/buffer.numberOfChannels}let sum=0,zc=0;for(let i=1;i<sample.length;i++){const v=sample[i],p=sample[i-1];sum+=v*v;if((v>=0)!==(p>=0))zc++}const rms=Math.sqrt(sum/sample.length),brightness=Math.min(1,zc/sample.length*2.4),energy=Math.min(1,rms*5),duration=buffer.duration;let best=0,bestLag=0;const minLag=Math.floor(rate/step*60/180),maxLag=Math.ceil(rate/step*60/60);for(let lag=Math.max(2,minLag);lag<=Math.min(maxLag,sample.length/2);lag+=2){let ac=0,n=0;for(let i=lag;i<sample.length;i+=Math.max(1,Math.floor(sample.length/8000))){ac+=sample[i]*sample[i-lag];n++}ac/=Math.max(1,n);if(ac>best){best=ac;bestLag=lag}}const tempo=bestLag?Math.max(60,Math.min(200,Math.round(60/(bestLag*step/rate)))):140;const chroma=new Array(12).fill(0),N=1024;for(let start=0;start+N<sample.length;start+=N){for(let k=1;k<N/2;k++){let re=0,im=0;for(let n=0;n<N;n+=8){const x=sample[start+n],a=2*Math.PI*k*n/N;re+=x*Math.cos(a);im-=x*Math.sin(a)}const mag=Math.hypot(re,im),freq=k*rate/(step*N);if(freq>=55&&freq<1760){const midi=Math.round(69+12*Math.log2(freq/440));chroma[(midi%12+12)%12]+=mag}}}let keyIndex=0;for(let i=1;i<12;i++)if(chroma[i]>chroma[keyIndex])keyIndex=i;const names=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];return{tempo,energy,brightness,duration,key:names[keyIndex],keyIndex}}
 async function inspectReference(file){try{$('#analysisText').textContent='Analyse audio · tempo, énergie, texture…';$('#analysisBadge').textContent='SCAN';const ac=new (window.AudioContext||window.webkitAudioContext)();const buf=await ac.decodeAudioData(await file.arrayBuffer());state.inspiration=analyzeReference(buf);await ac.close();const i=state.inspiration;$('#analysisText').textContent='≈ '+i.tempo+' BPM · '+i.key+' · énergie '+Math.round(i.energy*100)+'% · texture '+(i.brightness>.55?'brillante':'sombre');$('#analysisBadge').textContent='INSPIRÉ';if($('#bpm').value==140)$('#bpm').value=i.tempo}catch(e){state.inspiration=null;$('#analysisText').textContent='Référence chargée · analyse indisponible';$('#analysisBadge').textContent='AUDIO'}}
-function compose(){const insp=state.inspiration,bpm=Math.max(60,Math.min(200,+$('#bpm').value||140)),bars=+$('#bars').value,style=$('#style').value,mood=$('#mood').value,complexity=+$('#complexity').value/100,energy=+$('#energy').value/100,r=rng($('#seed').value+'|'+style+'|'+mood+'|'+$('#substyle').value);const rootMap={Rap:[48,45,43,50],Drill:[38,41,43,36],Trap:[48,43,45,41],Hyperpop:[57,53,60,55],'R&B':[45,50,52,48],Pop:[48,43,45,50],Phonk:[45,41,43,38],'Hard Techno':[41,43,36,38],'Lo-fi':[48,45,43,50],Rock:[40,43,45,38],Experimental:[50,46,53,48]},roots=(rootMap[style]||rootMap.Rap).map((n,i)=>n+(insp&&insp.brightness<.35?-2:0)),scale=chooseScale(style,mood),o={drums:[],bass:[],chords:[],melody:[],counter:[],arp:[]};const progression=style==='R&B'?[0,5,3,4]:style==='Pop'?[0,5,3,4]:style==='Hard Techno'?[0,0,3,5]:[0,3,5,4];const motif=[];for(let i=0;i<8;i++)motif.push(scale[Math.floor(r()*scale.length)]+(r()<.18?12:0));const chord=(root,kind)=>kind==='minor'?[root,root+3,root+7,root+10]:[root,root+4,root+7,root+11];for(let bar=0;bar<bars;bar++){const base=bar*1920,section=sectionFor(bar,bars),hook=section==='hook',intro=section==='intro',outro=section==='outro',active=(intro?.45:outro?.5:hook?1.18:1)*energy,root=roots[progression[bar%progression.length]],triad=chord(root,style==='Pop'||style==='R&B'?'major':'minor');triad.forEach((p,j)=>add(o.chords,base,p,hook?1820:1750,38+active*30));if(!intro||r()<.45)add(o.bass,base,root-12,600,75+active*25);add(o.bass,base+720,root-12+(hook&&r()<.35?12:0),360,68+active*25);if(hook||r()<.5)add(o.bass,base+1320,root-12,420,65+active*25);const density=Math.round(5+complexity*10+(hook?3:0));const trapKick=[0,5,8,11,14],drillKick=[0,3,7,10,14],phonkKick=[0,6,10,14],hat=[0,2,4,6,8,10,12,14];for(let s=0;s<16;s++){const t=base+s*120,kicks=style==='Drill'?drillKick:style==='Phonk'?phonkKick:trapKick,kick=style==='Hard Techno'?s%2===0:kicks.includes(s)||(hook&&s===15&&r()<.45);if(kick&&(!intro||s%4===0))add(o.drums,t,36,70,92+active*28,9);if(!intro&&(s===4||s===12))add(o.drums,t,38,55,88+active*20,9);if(!intro&&(hat.includes(s)||r()<complexity*.28))add(o.drums,t+(r()<.18?20:0),42,28,42+active*34,9);if(!intro&&hook&&s%4===3&&r()<.28)add(o.drums,t,46,40,55,9);if(!intro&&$('#fills').checked&&s>12&&r()<complexity*.55)add(o.drums,t,45,30,55,9)}for(let n=0;n<density;n++){const pos=(n*2+bar*3)%16,variation=(bar%4===3&&$('#variations').checked)?(r()<.5?1:-1):0,p=root+12+motif[n%motif.length]+variation,t=base+pos*120+20,d=80+(n%3)*70;add(o.melody,t,p,d,48+active*48);if($('#counter').checked&&hook&&n%3===1)add(o.counter,t+90,p-5,120,38+active*24)}if($('#arp').checked&&(!intro||r()<.5)){for(let s=0;s<8;s++){const p=triad[s%triad.length]+12+(s%2&&hook?12:0);add(o.arp,base+s*240,p,130,25+active*24)}}if($('#variations').checked&&bar%4===3&&!intro)add(o.melody,base+1740,root+12+motif[(bar+3)%motif.length],130,72+active*20)}if(!$('#intro').checked){for(const k of ['drums','melody','counter','arp'])o[k]=o[k].filter(n=>n.t>=1920)}if(!$('#outro').checked){const cut=Math.max(0,(bars-4)*1920);for(const k of Object.keys(o))o[k]=o[k].filter(n=>n.t<cut)}state.notes=Object.entries(o).flatMap(([track,arr])=>arr.map(n=>({...n,track})));const generated={};for(const[id,arr]of Object.entries(o))generated[id]={midi:makeMidi(arr,bpm,id==='drums'?9:trackIds.indexOf(id),gm[id]||0,trackNames[id]),notes:arr};generated.full={midi:makeFullMidi(o,bpm),notes:state.notes};return generated}
+function compose(){
+  const insp=state.inspiration,bpm=Math.max(60,Math.min(200,+$('#bpm').value||140)),bars=+$('#bars').value;
+  const style=$('#style').value,mood=$('#mood').value,complexity=+$('#complexity').value/100,energy=+$('#energy').value/100;
+  const seed=$('#seed').value+'|'+style+'|'+mood+'|'+$('#substyle').value;
+  const r=rng(seed);
+  const pick=a=>a[Math.floor(r()*a.length)];
+  const chance=p=>r()<p;
+  const step=120,barTicks=1920;
+  const o={drums:[],bass:[],chords:[],melody:[],counter:[],arp:[]};
+  const rootBase={Rap:[48,50,45,43],Drill:[38,41,43,36],Trap:[48,43,45,41],Hyperpop:[57,53,60,55],'R&B':[45,50,52,48],Pop:[48,43,45,50],Phonk:[45,41,43,38],'Hard Techno':[41,43,36,38],'Lo-fi':[48,45,43,50],Rock:[40,43,45,38],Experimental:[50,46,53,48]};
+  const roots=(rootBase[style]||rootBase.Rap).slice();
+  if(insp) roots.forEach((_,i)=>roots[i]+=((insp.keyIndex-(i*2+3))%12+12)%12);
+  const scale=chooseScale(style,mood);
+  const modeSets={
+    major:[0,2,4,5,7,9,11],minor:[0,2,3,5,7,8,10],dorian:[0,2,3,5,7,9,10],
+    phrygian:[0,1,3,5,7,8,10],harmonic:[0,2,3,5,7,8,11],pentatonic:[0,2,4,7,9],blues:[0,3,5,6,7,10]
+  };
+  const chosenMode=pick(style==='Hard Techno'?['minor','phrygian','dorian']:style==='R&B'?['minor','dorian','major']:['minor','minor','dorian','major','harmonic','pentatonic']);
+  const musicalScale=modeSets[chosenMode]||scale;
+  const progressionLibrary=[
+    [0,3,5,4],[0,5,3,4],[0,3,4,5],[0,5,4,3],[0,4,5,3],[0,2,5,4],
+    [0,6,3,4],[0,4,2,5],[0,3,6,5],[0,5,2,6],[0,3,5,1],[0,4,3,6]
+  ];
+  let progression=pick(progressionLibrary);
+  if(style==='Hard Techno') progression=pick([[0,0,3,5],[0,3,0,5],[0,0,5,3]]);
+  const qualities=style==='R&B'?['min7','maj7','min7','dom7']:['minor','minor','major','major'];
+  const chord=(root,q)=>{
+    const map={major:[0,4,7],minor:[0,3,7],min7:[0,3,7,10],maj7:[0,4,7,11],dom7:[0,4,7,10],sus2:[0,2,7],sus4:[0,5,7],add9:[0,4,7,14]};
+    return (map[q]||map.minor).map(x=>root+x);
+  };
+  const voicing=(notes,inv)=>{
+    const a=notes.map((p,i)=>p+(i<inv?12:0));
+    return a.sort((x,y)=>x-y);
+  };
+  const chordBars=[];
+  const motifLength=pick([4,6,8,12]);
+  const motif=[];
+  for(let i=0;i<motifLength;i++){
+    const degree=Math.floor(r()*musicalScale.length);
+    const octave=chance(.16)?12:0;
+    motif.push({d:degree,o:octave});
+  }
+  const rhythmBanks={
+    Rap:[[0,3,6,8,11,14],[0,4,7,10,12,15],[0,2,5,8,10,13,15]],
+    Drill:[[0,3,7,10,14],[0,2,6,9,13,15],[0,5,8,11,14,15]],
+    Trap:[[0,3,5,8,11,14],[0,4,7,10,12,15],[0,2,6,9,11,14]],
+    Phonk:[[0,3,6,10,14],[0,5,9,12,14],[0,2,7,10,13,15]],
+    'Hard Techno':[[0,2,4,6,8,10,12,14],[0,3,4,7,8,11,12,15]],
+    'R&B':[[0,4,7,10,14],[0,3,6,9,12,15],[0,5,8,11,14]],
+    Pop:[[0,4,8,12],[0,3,6,9,12,15],[0,2,5,8,10,13]],
+    LoFi:[[0,4,7,11,14],[0,3,8,12,15]],
+    Rock:[[0,4,8,12],[0,3,6,9,12,15]],
+    Hyperpop:[[0,2,5,7,10,12,14,15],[0,3,6,8,11,13,15]],
+    Experimental:[[0,1,5,6,9,12,14],[0,2,3,7,11,13,15]]
+  };
+  const bank=rhythmBanks[style]||rhythmBanks.Rap;
+  const drumPattern=pick(bank);
+  const hatDensity=style==='Hard Techno'?1:.55+complexity*.4;
+  const sectionFor2=bar=>{
+    const x=bar/bars;
+    if(x<.10)return'intro';
+    if(x<.30)return'verse';
+    if(x<.38)return'pre';
+    if(x<.60)return'hook';
+    if(x<.76)return'verse2';
+    if(x<.88)return'break';
+    return'outro';
+  };
+  const degreePitch=(root,degree,oct=0)=>{
+    const len=musicalScale.length,idx=((degree%len)+len)%len,cycles=Math.floor(degree/len);
+    return root+musicalScale[idx]+12*cycles+oct;
+  };
+  let lastMelody=null,lastBass=null;
+  for(let bar=0;bar<bars;bar++){
+    const base=bar*barTicks,section=sectionFor2(bar),hook=section==='hook',pre=section==='pre',intro=section==='intro',brk=section==='break',outro=section==='outro';
+    const pg=progression[bar%progression.length];
+    const root=roots[pg%roots.length];
+    let q=qualities[pg%qualities.length];
+    if(style==='Pop'||style==='R&B') q=chance(.28)?pick(['maj7','min7','add9']):q;
+    else if(chance(.18)) q=pick(['minor','sus2','sus4','add9']);
+    const notes=chord(root,q);
+    const inv=chance(.55)?Math.floor(r()*Math.min(3,notes.length)):0;
+    const voiced=voicing(notes,inv);
+    chordBars.push({root,notes:voiced});
+    const chordDur=hook?1880:brk?1440:1840;
+    voiced.forEach((p,j)=>{
+      if(!intro||j===0||chance(.55)) add(o.chords,base,p,chordDur,34+energy*24+(hook?14:0));
+    });
+    if(pre||hook) add(o.chords,base+960,voiced[voiced.length-1]+12,700,42+energy*22);
+    const bassPattern=style==='Hard Techno'?[0,2,4,6,8,10,12,14]:pick([
+      [0,3,7,11,14],[0,4,8,11,15],[0,2,6,9,12,14],[0,5,8,10,14]
+    ]);
+    for(const s of bassPattern){
+      if(intro&&s>3)continue;
+      if(brk&&chance(.72))continue;
+      const isAccent=s===0||s===8;
+      const degree=chance(.72)?0:pick([0,0,2,4,5]);
+      const p=degree===0?root-12:degreePitch(root,degree,-12);
+      const octaveJump=hook&&chance(.12)?12:0;
+      const t=base+s*step+(chance(.12)?20:0);
+      const d=pick([240,300,360,420,540]);
+      if(!lastBass||Math.abs(p-lastBass)<19||chance(.7)){add(o.bass,t,p+octaveJump,d,isAccent?92:72+energy*18);lastBass=p;}
+    }
+    if((hook||pre)&&chance(.6))add(o.bass,base+1680,root-12+(chance(.35)?12:0),150,62);
+    const kick=drumPattern;
+    for(let s=0;s<16;s++){
+      const t=base+s*step;
+      let hit=kick.includes(s);
+      if(style==='Hard Techno')hit=s%2===0;
+      if(hook&&chance(.13))hit=true;
+      if(brk)hit=s===0;
+      if(intro)hit=hit&&s%4===0;
+      if(hit)add(o.drums,t,36,80,96+energy*25,9);
+      if(!intro&&!brk&&(s===4||s===12||(hook&&s===15)))add(o.drums,t,38,65,88+energy*20,9);
+      if(!intro&&!brk){
+        const hats=s%2===0||chance(hatDensity*.22);
+        if(hats)add(o.drums,t+(chance(.12)?18:0),42,28,42+complexity*38,9);
+        if(complexity>.55&&chance(.18))add(o.drums,t+60,42,20,35+energy*25,9);
+      }
+    }
+    if($('#fills').checked&&bar%4===3&&!intro&&!brk){
+      for(let s=12;s<16;s++)if(chance(.7))add(o.drums,base+s*step,45,25,55+energy*30,9);
+    }
+    const melodyDensity=Math.round((3+complexity*8)*(hook?1.25:pre?1.05:brk?.35:1));
+    const transform=bar%4;
+    for(let n=0;n<melodyDensity;n++){
+      const m=motif[(n+bar*2)%motif.length];
+      let degree=m.d;
+      if(transform===1)degree=-degree;
+      if(transform===2)degree=m.d+(n%2?2:0);
+      if(transform===3)degree=m.d+(n%3===0?musicalScale.length:0);
+      degree+=pick([0,0,0,1,-1]);
+      let p=degreePitch(root,degree,m.o);
+      if(lastMelody!==null&&Math.abs(p-lastMelody)>12)p+=p>lastMelody?-12:12;
+      const positions=pick([[0,2,4,7,10,12,14],[1,4,6,9,12,14],[0,3,5,8,11,15]]);
+      const pos=positions[n%positions.length];
+      const t=base+pos*step+pick([0,0,20,40]);
+      const d=pick([70,100,130,170,220]);
+      add(o.melody,t,p,d,48+energy*38+(hook?12:0));lastMelody=p;
+      if($('#counter').checked&&(hook||pre)&&n%3===1){
+        const cp=p+pick([-12,-7,5,7]);
+        add(o.counter,t+pick([80,100,140]),cp,pick([100,140,180]),35+energy*24);
+      }
+    }
+    if($('#arp').checked&&!intro&&!brk){
+      const arpOrder=pick([[0,1,2,1],[0,2,1,2],[0,1,3,2],[2,1,0,1]]);
+      const arps=hook?8:4;
+      for(let s=0;s<arps;s++){
+        const p=voiced[arpOrder[s%4]%voiced.length]+12+(hook&&chance(.35)?12:0);
+        add(o.arp,base+s*(hook?240:480),p,hook?100:150,28+energy*20);
+      }
+    }
+    if($('#variations').checked&&bar%4===3&&!intro&&!brk){
+      add(o.melody,base+1740,degreePitch(root,motif[(bar+3)%motif.length].d+2,12),100,65+energy*20);
+    }
+  }
+  if(!$('#intro').checked)for(const k of ['drums','melody','counter','arp'])o[k]=o[k].filter(n=>n.t>=1920);
+  if(!$('#outro').checked){const cut=Math.max(0,(bars-4)*1920);for(const k of Object.keys(o))o[k]=o[k].filter(n=>n.t<cut);}
+  for(const k of Object.keys(o)){
+    o[k].sort((a,b)=>a.t-b.t||a.p-b.p);
+    if(k!=='drums')for(const n of o[k])n.v=Math.max(1,Math.min(127,n.v+(r()-.5)*10));
+  }
+  state.notes=Object.entries(o).flatMap(([track,arr])=>arr.map(n=>({...n,track})));
+  const generated={};
+  for(const[id,arr]of Object.entries(o))generated[id]={midi:makeMidi(arr,bpm,id==='drums'?9:trackIds.indexOf(id),gm[id]||0,trackNames[id]),notes:arr};
+  generated.full={midi:makeFullMidi(o,bpm),notes:state.notes};
+  return generated;
+}
 function downloadBlob(name,data,type='audio/midi'){const u=URL.createObjectURL(new Blob([data],{type})),a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),1200)}
 function downloadTrack(id){const d=state.generated[id];if(d)downloadBlob(id==='full'?'melodix-instrumentale-full.mid':'melodix-'+id+'.mid',d.midi)}
 const crcTable=(()=>{const t=[];for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=(c&1)?0xedb88320^(c>>>1):c>>>1;t[n]=c>>>0}return t})();
