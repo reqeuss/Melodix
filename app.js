@@ -241,7 +241,7 @@ function renderBrowserAISequence(sample,bars,bpm,energy,complexity){
   }
   for(let repeat=0;repeat<repeatCount;repeat++){
     const repeatOffset=repeat*sourceBars*barTicks;
-    const section=sectionFor(Math.min(bars-1,repeat*sourceBars),bars);
+    const x=Math.min(0.999,(repeat*sourceBars)/bars);const section=x<.10?'intro':x<.30?'verse':x<.38?'pre':x<.60?'hook':x<.76?'verse2':x<.88?'break':'outro';
     for(const [track,notes] of Object.entries(byTrack)){
       for(const n of notes){
         const qStart=Number.isFinite(n.quantizedStartStep)?n.quantizedStartStep:0;
