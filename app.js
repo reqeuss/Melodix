@@ -315,8 +315,49 @@ function zipStore(files){const enc=new TextEncoder(),local=[],central=[];let off
 function downloadZip(){const files=Object.entries(state.generated).filter(([id])=>id!=='full').map(([id,d])=>({name:'midi/melodix-'+id+'.mid',data:d.midi}));files.push({name:'melodix-instrumentale-full.mid',data:state.generated.full.midi});downloadBlob('melodix-midi-pack.zip',zipStore(files),'application/zip')}
 async function loadReference(f){if(!f||!f.type.startsWith('audio/'))return;if(state.reference?.url)URL.revokeObjectURL(state.reference.url);const url=URL.createObjectURL(f);state.reference={url};$('#player').src=url;$('#player').hidden=false;$('#fileName').textContent=f.name;$('#format').textContent=(f.name.split('.').pop()||'AUDIO').toUpperCase();$('#refState').textContent='READY';$('#player').onloadedmetadata=()=>$('#duration').textContent=Number.isFinite($('#player').duration)?fmt($('#player').duration):'—';await inspectReference(f)}
 function fmt(s){return Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0')}
-function nativeInstrument(ctx,type,p,when,dur,vel){const o=ctx.createOscillator(),g=ctx.createGain(),f=ctx.createBiquadFilter();const freq=440*Math.pow(2,(p-69)/12);const wave=type==='lead'?'sawtooth':type==='pad'?'triangle':type==='arp'?'square':'sine';o.type=wave;o.frequency.setValueAtTime(freq,when);if(type==='lead')o.detune.setValueAtTime(-7,when);f.type='lowpass';f.frequency.setValueAtTime(type==='lead'?2600:type==='pad'?1800:4200,when);f.Q.value=type==='lead'?3:0.7;const peak=Math.min(.22,.05+vel/600);g.gain.setValueAtTime(.0001,when);g.gain.exponentialRampToValueAtTime(peak,when+.012);g.gain.exponentialRampToValueAtTime(Math.max(.018,peak*.55),when+Math.min(.12,dur*.35));g.gain.exponentialRampToValueAtTime(.0001,when+dur);o.connect(f).connect(g).connect(ctx.destination);o.start(when);o.stop(when+dur+.03)}
-function playNativePreview(bpm){const c=state.audioCtx;if(!c||c.state!=='running')throw new Error('AudioContext unavailable');const secTick=60/bpm/480,now=c.currentTime+.08;for(const n of state.notes){if(n.track==='bass'||n.track==='drums')continue;const type=n.track==='melody'?'lead':n.track==='counter'?'pad':n.track==='arp'?'arp':'chords';try{nativeInstrument(c,type,n.p,now+n.t*secTick,Math.max(.08,n.d*secTick),n.v)}catch(e){console.warn('note preview skipped',e)}}try{play808Preview(bpm);playDrumsPreview(bpm)}catch(e){console.warn('rhythm preview skipped',e)}}
+const soundfontMap={chords:'acoustic_grand_piano',melody:'electric_piano_1',counter:'acoustic_guitar_steel',arp:'acoustic_guitar_nylon',bass:'synth_bass_2'};
+async function getSoundfontInstrument(name){
+  if(!state.audioCtx)throw new Error('AudioContext unavailable');
+  if(state.players[name])return state.players[name];
+  const p=await Soundfont.instrument(state.audioCtx,name,{soundfont:'MusyngKite',format:'mp3',gain:0.9});
+  state.players[name]=p;return p;
+}
+async function playSampledTrack(track,bpm){
+  const name=soundfontMap[track];if(!name)return;
+  const p=await getSoundfontInstrument(name);
+  const now=state.audioCtx.currentTime+.12,secTick=60/bpm/480;
+  for(const n of state.notes.filter(x=>x.track===track)){
+    const when=now+n.t*secTick,dur=Math.max(.06,n.d*secTick);
+    try{p.play(n.p,when,{duration:dur,gain:Math.min(1,(n.v||80)/100)})}catch(e){console.warn(track,e)}
+  }
+}
+function play808Preview(bpm){
+  const c=state.audioCtx;if(!c)return;
+  const now=c.currentTime+.12,secTick=60/bpm/480;
+  for(const n of state.notes.filter(x=>x.track==='bass')){
+    const when=now+n.t*secTick,dur=Math.max(.08,n.d*secTick),o=c.createOscillator(),g=c.createGain(),f=c.createBiquadFilter();
+    o.type='sine';o.frequency.setValueAtTime(Math.min(100,440*Math.pow(2,(n.p-69)/12)),when);
+    o.frequency.exponentialRampToValueAtTime(Math.max(30,440*Math.pow(2,(n.p-69)/12)),when+Math.min(.08,dur*.2));
+    f.type='lowpass';f.frequency.setValueAtTime(180,when);g.gain.setValueAtTime(.0001,when);
+    g.gain.exponentialRampToValueAtTime(.62,when+.006);g.gain.exponentialRampToValueAtTime(.18,when+Math.min(.18,dur*.4));g.gain.exponentialRampToValueAtTime(.0001,when+dur);
+    o.connect(f).connect(g).connect(c.destination);o.start(when);o.stop(when+dur+.03);
+  }
+}
+function playDrumsPreview(bpm){
+  const c=state.audioCtx;if(!c)return;
+  for(const n of state.notes.filter(x=>x.track==='drums')){
+    const when=c.currentTime+.12+n.t/480*60/bpm,g=c.createGain(),o=c.createOscillator();
+    o.type=n.p===42?'square':'sine';o.frequency.setValueAtTime(n.p===36?82:n.p===38?190:720,when);
+    if(n.p===36)o.frequency.exponentialRampToValueAtTime(42,when+.07);
+    g.gain.setValueAtTime(.0001,when);g.gain.exponentialRampToValueAtTime(Math.min(.22,n.v/650),when+.004);
+    g.gain.exponentialRampToValueAtTime(.0001,when+(n.p===36?.12:.07));o.connect(g).connect(c.destination);o.start(when);o.stop(when+(n.p===36?.14:.09));
+  }
+}
+async function playNativePreview(bpm){
+  const c=state.audioCtx;if(!c||c.state!=='running')throw new Error('AudioContext unavailable');
+  await Promise.all(['chords','melody','counter','arp'].map(t=>playSampledTrack(t,bpm)));
+  play808Preview(bpm);playDrumsPreview(bpm);
+}
 async function playPreview(){if(!state.notes.length)return;clearInterval(state.timer);state.timer=null;state.playing=true;$('#playPreview').textContent='Ⅱ';const bpm=+$('#bpm').value||140;try{const Ctx=window.AudioContext||window.webkitAudioContext;if(!Ctx)throw new Error('WebAudio unavailable');if(!state.audioCtx||state.audioCtx.state==='closed')state.audioCtx=new Ctx();if(state.audioCtx.state!=='running')await state.audioCtx.resume();if(state.audioCtx.state!=='running')throw new Error('AudioContext not running');playNativePreview(bpm);const start=performance.now(),secTick=60/bpm/480,total=+$('#bars').value*1920;state.timer=setInterval(()=>{const elapsed=(performance.now()-start)/1000,p=Math.min(1,elapsed/(total*secTick));$('#transportFill').style.width=p*100+'%';$('#playTime').textContent=String(Math.floor(elapsed/60)).padStart(2,'0')+':'+String(Math.floor(elapsed%60)).padStart(2,'0');if(p>=1)stopPreview()},50)}catch(e){console.error('Melodix preview:',e);state.playing=false;$('#playPreview').textContent='▶';clearInterval(state.timer);state.timer=null;alert('Le moteur audio du navigateur n’a pas pu démarrer. Les MIDI restent disponibles.')}}
 function play808Preview(bpm){const c=state.audioCtx;if(!c)return;const notes=state.notes.filter(x=>x.track==='bass'),now=c.currentTime+.12;for(const n of notes){const when=now+n.t/480*60/bpm,dur=Math.max(.08,n.d/480*60/bpm),o=c.createOscillator(),g=c.createGain();o.type='sine';o.frequency.setValueAtTime(Math.min(90,440*Math.pow(2,(n.p-69)/12)*2.2),when);o.frequency.exponentialRampToValueAtTime(Math.max(28,440*Math.pow(2,(n.p-69)/12)),when+Math.min(.09,dur*.35));g.gain.setValueAtTime(.0001,when);g.gain.exponentialRampToValueAtTime(.62,when+.006);g.gain.exponentialRampToValueAtTime(.16,when+Math.min(.12,dur*.35));g.gain.exponentialRampToValueAtTime(.0001,when+dur);o.connect(g).connect(c.destination);o.start(when);o.stop(when+dur+.02)}}
 function playDrumsPreview(bpm){const c=state.audioCtx;if(!c)return;for(const n of state.notes.filter(x=>x.track==='drums')){const when=c.currentTime+.12+n.t/480*60/bpm,g=c.createGain(),o=c.createOscillator();o.type=n.p===42?'square':'sine';o.frequency.setValueAtTime(n.p===36?82:n.p===38?190:720,when);if(n.p===36)o.frequency.exponentialRampToValueAtTime(42,when+.07);g.gain.setValueAtTime(.0001,when);g.gain.exponentialRampToValueAtTime(Math.min(.22,n.v/650),when+.004);g.gain.exponentialRampToValueAtTime(.0001,when+(n.p===36?.12:.07));o.connect(g).connect(c.destination);o.start(when);o.stop(when+(n.p===36?.14:.09))}}
