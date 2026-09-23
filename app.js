@@ -204,73 +204,103 @@ function compose(){
   generated.full={midi:makeFullMidi(o,bpm),notes:state.notes};
   return generated;
 }
-async function composeWithLocalAI(){
-  const style=$('#style').value,mood=$('#mood').value,substyle=$('#substyle').value;
-  const bpm=Math.max(60,Math.min(200,+$('#bpm').value||140)),bars=+$('#bars').value;
-  const energy=+$('#energy').value,complexity=+$('#complexity').value;
-  const insp=state.inspiration;
-  const model=localStorage.getItem('melodix-ai-model')||'qwen3:8b';
-  const key=insp?.key||'C', tempo=insp?.tempo||bpm;
-  const prompt=`You are the music director of Melodix. Compose an ORIGINAL instrumental arrangement.
-Style: ${style}. Sub-style: ${substyle}. Mood: ${mood}. Tempo: ${tempo} BPM. Key center: ${key}.
-Energy: ${energy}/100. Complexity: ${complexity}/100.
-Create an 8-bar musical seed phrase that can be expanded into ${bars} bars.
-Think like a producer: strong groove, memorable motif, coherent harmony, bass following harmony, drums with variation, call/response, tension before hooks.
-Do NOT write prose. Return ONLY valid JSON with exactly:
-{"mode":"major|minor|dorian|phrygian|harmonic","progression":[8 integers 0-6],"melody":[{"bar":0-7,"beat":0-15,"degree":-7..14,"length":1..8,"velocity":1..127}],"bass":[{"bar":0-7,"beat":0-15,"degree":-7..7,"length":1..8,"velocity":1..127}],"drums":[{"bar":0-7,"beat":0-15,"kind":"kick|snare|hat|openhat","velocity":1..127}]}
-Rules: progression uses scale degrees as chord roots; melody must be singable and repetitive with purposeful variation; bass should mostly use chord root/third/fifth; drums must establish genre groove. Avoid random notes.`;
-  const res=await fetch('http://127.0.0.1:11434/api/chat',{
-    method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({model,messages:[{role:'user',content:prompt}],stream:false,format:'json',options:{temperature:.72,num_ctx:8192}})
-  });
-  if(!res.ok)throw new Error('Ollama HTTP '+res.status);
-  const data=await res.json();
-  const raw=data.message?.content||'';
-  const plan=JSON.parse(raw.replace(/^\`\`\`json\\s*/,'').replace(/\`\`\`$/,'').trim());
-  if(!Array.isArray(plan.progression)||!Array.isArray(plan.melody)||!Array.isArray(plan.bass)||!Array.isArray(plan.drums))throw new Error('AI score incomplete');
-  return renderAIPlan(plan,bpm,bars,style,energy,complexity);
+let browserMusicAI=null;
+const BROWSER_AI_CHECKPOINT='https://storage.googleapis.com/magentadata/js/checkpoints/music_vae/trio_4bar';
+
+async function getBrowserMusicAI(){
+  if(browserMusicAI)return browserMusicAI;
+  if(!window.music_vae?.MusicVAE)throw new Error('Magenta.js non chargé');
+  $('#statusBadge').textContent='CHARGEMENT IA WEB…';
+  $('#emptyOutput').innerHTML='<div>🧠</div><b>Chargement de l’IA musicale…</b><span>Le modèle est téléchargé une seule fois dans le navigateur.</span>';
+  browserMusicAI=new music_vae.MusicVAE(BROWSER_AI_CHECKPOINT);
+  await browserMusicAI.initialize();
+  return browserMusicAI;
 }
-function renderAIPlan(plan,bpm,bars,style,energy,complexity){
-  const scaleMap={major:[0,2,4,5,7,9,11],minor:[0,2,3,5,7,8,10],dorian:[0,2,3,5,7,9,10],phrygian:[0,1,3,5,7,8,10],harmonic:[0,2,3,5,7,8,11]};
-  const scale=scaleMap[plan.mode]||scaleMap.minor;
-  const roots={Rap:48,Drill:38,Trap:48,Hyperpop:57,'R&B':45,Pop:48,Phonk:45,'Hard Techno':41,'Lo-fi':48,Rock:40,Experimental:50};
-  const root=state.inspiration?.keyIndex??(roots[style]||48)%12;
-  const rootMidi=state.inspiration?60+root:(roots[style]||48);
+
+function hashSeedNumber(seed){
+  let h=2166136261;
+  for(let i=0;i<seed.length;i++){h^=seed.charCodeAt(i);h=Math.imul(h,16777619)}
+  return h>>>0;
+}
+
+function renderBrowserAISequence(sample,bars,bpm,energy,complexity){
   const o={drums:[],bass:[],chords:[],melody:[],counter:[],arp:[]};
-  const tick=120,barTicks=1920;
-  const degreePitch=(degree,oct=0)=>{const i=((degree%scale.length)+scale.length)%scale.length;return rootMidi+scale[i]+12*Math.floor(degree/scale.length)+oct};
-  const chordFor=d=>[d,d+2,d+4,d+6].map(x=>degreePitch(x));
-  for(let bar=0;bar<bars;bar++){
-    const src=bar%8, section=sectionFor(bar,bars), hook=section==='hook', intro=section==='intro', brk=section==='break';
-    const prog=((Number(plan.progression[src])||0)%7+7)%7;
-    const chord=chordFor(prog);
-    chord.forEach((p,i)=>{if(!intro||i===0)add(o.chords,bar*barTicks,p,hook?1880:1800,38+energy*.24)});
-    for(const n of plan.bass.filter(x=>Number(x.bar)===src)){
-      if(brk&&((bar*31+Number(n.beat)*17)%100)<65)continue;
-      add(o.bass,bar*barTicks+Number(n.beat)*tick,degreePitch(Number(n.degree)||0,-12),Math.max(80,Number(n.length||2)*tick),Math.min(127,Number(n.velocity||80)+(hook?8:0)));
-    }
-    for(const n of plan.melody.filter(x=>Number(x.bar)===src)){
-      let degree=Number(n.degree)||0;
-      if(bar>=8&&bar%4===0)degree+=2;
-      if(bar>=16&&bar%8>=4)degree-=1;
-      add(o.melody,bar*barTicks+Number(n.beat)*tick,degreePitch(degree,12),Math.max(50,Number(n.length||2)*tick/2),Math.min(127,Number(n.velocity||70)+(hook?10:0)));
-      if($('#counter').checked&&hook&&Number(n.beat)%4===2)add(o.counter,bar*barTicks+Number(n.beat)*tick+60,degreePitch(degree-2,12),100,42+energy*.2);
-    }
-    for(const n of plan.drums.filter(x=>Number(x.bar)===src)){
-      const p={kick:36,snare:38,hat:42,openhat:46}[n.kind];if(p)add(o.drums,bar*barTicks+Number(n.beat)*tick,p,p===42?28:70,Number(n.velocity)||70,9);
-    }
-    if(!intro&&!brk&&$('#arp').checked){
-      for(let s=0;s<(hook?8:4);s++)add(o.arp,bar*barTicks+s*(hook?240:480),chord[s%chord.length]+12,120,28+energy*.18);
-    }
-    if($('#fills').checked&&bar%4===3&&!intro)for(let s=13;s<16;s++)add(o.drums,bar*barTicks+s*tick,45,25,55+energy*.25,9);
+  const sourceBars=Math.max(1,Math.round((sample.totalQuantizedSteps||64)/16));
+  const stepsPerBar=16;
+  const barTicks=1920;
+  const scale=chooseScale($('#style').value,$('#mood').value);
+  const seedR=rng($('#seed').value+'|browser-ai');
+  const human=(seedR()-.5)*18;
+  const baseRoot=state.inspiration?.keyIndex ?? ({Rap:0,Drill:2,Trap:0,Hyperpop:9,'R&B':9,Pop:0,Phonk:9,'Hard Techno':5,'Lo-fi':0,Rock:4,Experimental:2}[$('#style').value]||0);
+  const pitchShift=baseRoot-(sample.notes.find(n=>!n.isDrum)?.pitch||60)%12;
+  const repeatCount=Math.ceil(bars/sourceBars);
+  const byTrack={melody:[],bass:[],drums:[]};
+  for(const n of sample.notes||[]){
+    const track=n.isDrum?'drums':(n.instrument===1?'bass':'melody');
+    byTrack[track].push(n);
   }
-  if(!$('#intro').checked)for(const k of ['drums','melody','counter','arp'])o[k]=o[k].filter(n=>n.t>=1920);
-  if(!$('#outro').checked){const cut=Math.max(0,(bars-4)*1920);for(const k of Object.keys(o))o[k]=o[k].filter(n=>n.t<cut);}
+  for(let repeat=0;repeat<repeatCount;repeat++){
+    const repeatOffset=repeat*sourceBars*barTicks;
+    const section=sectionFor(Math.min(bars-1,repeat*sourceBars),bars);
+    for(const [track,notes] of Object.entries(byTrack)){
+      for(const n of notes){
+        const qStart=Number.isFinite(n.quantizedStartStep)?n.quantizedStartStep:0;
+        const qEnd=Number.isFinite(n.quantizedEndStep)?n.quantizedEndStep:qStart+1;
+        const t=repeatOffset+qStart*(barTicks/stepsPerBar);
+        const d=Math.max(30,(qEnd-qStart)*(barTicks/stepsPerBar));
+        if(t>=bars*barTicks)continue;
+        if(section==='break'&&track!=='melody'&&seedR()<.7)continue;
+        let p=n.pitch;
+        if(track!=='drums')p+=pitchShift;
+        if(track==='bass')p-=12;
+        p=Math.max(0,Math.min(127,p));
+        const v=Math.max(1,Math.min(127,(n.velocity||80)+(energy-50)*.12+(seedR()-.5)*8+human*.08));
+        add(o[track],t+Math.round((seedR()-.5)*Math.min(18,d*.08)),p,d,v,track==='drums'?9:0);
+      }
+    }
+    if($('#counter').checked&&(section==='hook'||section==='pre')){
+      const source=byTrack.melody.filter(n=>!n.isDrum).slice(0,8);
+      for(const n of source){
+        const t=repeatOffset+(n.quantizedStartStep||0)*(barTicks/stepsPerBar)+80;
+        if(t>=bars*barTicks)continue;
+        add(o.counter,t,Math.max(0,Math.min(127,n.pitch+pitchShift-7)),Math.max(60,((n.quantizedEndStep||1)-(n.quantizedStartStep||0))*(barTicks/stepsPerBar)*.55),42+energy*.22);
+      }
+    }
+    if($('#arp').checked&&(section==='hook'||section==='verse2')){
+      const source=byTrack.melody.filter(n=>!n.isDrum).slice(0,4);
+      source.forEach((n,i)=>{
+        const t=repeatOffset+i*480;
+        add(o.arp,t,Math.max(0,Math.min(127,n.pitch+pitchShift+12)),180,30+complexity*.35);
+      });
+    }
+  }
+  if(!$('#intro').checked)for(const k of ['drums','melody','counter','arp'])o[k]=o[k].filter(n=>n.t>=barTicks);
+  if(!$('#outro').checked){const cut=Math.max(0,(bars-4)*barTicks);for(const k of Object.keys(o))o[k]=o[k].filter(n=>n.t<cut)}
+  for(const k of Object.keys(o))o[k].sort((a,b)=>a.t-b.t||a.p-b.p);
   state.notes=Object.entries(o).flatMap(([track,arr])=>arr.map(n=>({...n,track})));
   const generated={};
   for(const[id,arr]of Object.entries(o))generated[id]={midi:makeMidi(arr,bpm,id==='drums'?9:trackIds.indexOf(id),gm[id]||0,trackNames[id]),notes:arr};
   generated.full={midi:makeFullMidi(o,bpm),notes:state.notes};
   return generated;
+}
+
+async function composeWithBrowserAI(){
+  const model=await getBrowserMusicAI();
+  const bars=+$('#bars').value,bpm=Math.max(60,Math.min(200,+$('#bpm').value||140));
+  const energy=+$('#energy').value,complexity=+$('#complexity').value;
+  const seed=$('#seed').value;
+  if(window.tf?.random?.setSeed)tf.random.setSeed(hashSeedNumber(seed));
+  const blocks=Math.ceil(bars/4);
+  const samples=await model.sample(blocks,Math.max(.45,Math.min(1.25,.65+complexity/250)));
+  const merged={notes:[],totalQuantizedSteps:blocks*64};
+  for(let i=0;i<samples.length;i++){
+    const sample=samples[i];
+    for(const n of sample.notes||[]){
+      merged.notes.push({...n,quantizedStartStep:(n.quantizedStartStep||0)+i*64,quantizedEndStep:(n.quantizedEndStep||0)+i*64});
+    }
+  }
+  $('#statusBadge').textContent='IA WEB · MUSIQUE';
+  return renderBrowserAISequence(merged,bars,bpm,energy,complexity);
 }
 
 function downloadBlob(name,data,type='audio/midi'){const u=URL.createObjectURL(new Blob([data],{type})),a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),1200)}
@@ -289,19 +319,19 @@ function playDrumsPreview(bpm){const c=state.audioCtx;if(!c)return;for(const n o
 function stopPreview(){state.playing=false;clearInterval(state.timer);state.timer=null;Object.values(state.players).forEach(p=>{try{p.stop()}catch{}});state.players={};if(state.drumCtx){try{state.drumCtx.close()}catch{}state.drumCtx=null}if(state.audioCtx&&state.audioCtx.state==='running'){try{state.audioCtx.suspend()}catch{}}$('#playPreview').textContent='▶';$('#transportFill').style.width='0%';$('#playTime').textContent='00:00'}
 async function generate(){
   const btn=$('#generate');btn.disabled=true;stopPreview();
-  $('#statusBadge').textContent='AI LOCALE…';$('#emptyOutput').hidden=false;$('#result').hidden=true;
-  $('#emptyOutput').innerHTML='<div>✦</div><b>Composition par intelligence musicale…</b><span>Analyse · harmonie · groove · mélodie · arrangement</span>';
+  $('#statusBadge').textContent='IA WEB…';$('#emptyOutput').hidden=false;$('#result').hidden=true;
+  $('#emptyOutput').innerHTML='<div>🧠</div><b>Création par IA musicale dans le navigateur…</b><span>Le modèle comprend harmonie, mélodie, basse et batterie.</span>';
   try{
-    state.generated=await composeWithLocalAI();
-    $('#emptyOutput').innerHTML='<div>✦</div><b>Rendu du morceau…</b><span>Finalisation MIDI et aperçu</span>';
+    state.generated=await composeWithBrowserAI();
   }catch(e){
-    console.warn('Melodix Local AI unavailable:',e);
+    console.warn('Melodix Browser AI unavailable:',e);
     $('#statusBadge').textContent='MODE CRÉATIF';
+    $('#emptyOutput').innerHTML='<div>✦</div><b>IA Web indisponible · moteur de secours</b><span>La génération MIDI reste disponible.</span>';
     state.generated=compose();
   }
   renderPreview();renderTracks();renderTrackDownloads();$('#result').hidden=false;$('#emptyOutput').hidden=true;
   $('#all').disabled=false;$('#zip').disabled=false;btn.disabled=false;$('#statusBadge').textContent='GENERATED';$('#statusBadge').classList.add('done');
-  $('#transportTitle').textContent=$('#style').value+' · '+$('#mood').value;
+  $('#transportTitle').textContent=$('#style').value+' · '+$('#mood').value+' · IA Web';
 }
 const seedButton=$('#randomSeed');if(seedButton)seedButton.onclick=()=>{$('#seed').value=randomSeed();$('#seed').focus()};if($('#seed').value==='melodix-01')$('#seed').value=randomSeed();
 const file=$('#file'),drop=$('#drop');file.onchange=e=>loadReference(e.target.files[0]);['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('drag')}));['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('drag')}));drop.addEventListener('drop',e=>loadReference(e.dataTransfer.files[0]));$('#clearRef').onclick=()=>{if(state.reference?.url)URL.revokeObjectURL(state.reference.url);state.reference=null;state.inspiration=null;file.value='';$('#player').removeAttribute('src');$('#player').load();$('#player').hidden=true;$('#fileName').textContent='Aucune référence';$('#duration').textContent='—';$('#format').textContent='—';$('#refState').textContent='AUTO';$('#analysisText').textContent='Aucune référence · moteur créatif autonome';$('#analysisBadge').textContent='AUTO'};$('#energy').oninput=e=>$('#energyOut').textContent=e.target.value+'%';$('#complexity').oninput=e=>$('#complexityOut').textContent=e.target.value+'%';$('#style').onchange=()=>{renderAdvice();renderTracks()};$('#generate').onclick=generate;$('#regen').onclick=generate;$('#playPreview').onclick=()=>state.playing?stopPreview():playPreview();$('#all').onclick=()=>downloadTrack('full');$('#zip').onclick=downloadZip;document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.activeElement.tagName!=='INPUT'&&document.activeElement.tagName!=='SELECT')generate()});renderAdvice();renderTracks();
