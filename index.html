@@ -1,1 +1,83 @@
-<!doctype html><html lang="fr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="Melodix — générateur d'instrumentales MIDI"><title>Melodix — MIDI Music Generator</title><link rel="stylesheet" href="style.css"></head><body><header><a class="brand" href="#"><b>M</b> Melodix</a><nav><a href="#generator">Générateur</a><a href="#features">Fonctions</a><a href="https://github.com/reqeuss/Melodix" target="_blank">GitHub ↗</a></nav></header><main id="generator"><section class="hero"><small>MIDI COMPOSITION ENGINE</small><h1>Transforme une <em>inspiration</em><br>en nouvelle instru.</h1><p>Choisis une référence, un style et une ambiance. Melodix génère des pistes MIDI originales que tu peux modifier dans ton DAW.</p></section><section class="workspace"><div class="panel"><div class="head"><i>01</i><h2>Référence</h2></div><label class="drop" id="drop"><input id="file" type="file" accept="audio/*"><strong id="fileName">Dépose ton morceau ici</strong><span>MP3, WAV, OGG, M4A · local</span><audio id="player" controls hidden></audio></label><div class="stats"><div><small>BPM</small><b id="refBpm">—</b></div><div><small>TONALITÉ</small><b id="refKey">—</b></div><div><small>DURÉE</small><b id="duration">—</b></div></div></div><div class="panel"><div class="head"><i>02</i><h2>Direction</h2></div><label>Style<select id="style"><option>Rap</option><option>Drill</option><option>Trap</option><option>Hyperpop</option><option>R&B</option><option>Pop</option><option>Phonk</option><option>Hard Techno</option><option>Lo-fi</option><option>Rock</option><option>Experimental</option></select></label><label>Ambiance<select id="mood"><option>Mélancolique</option><option>Dark</option><option>Énergique</option><option>Planante</option><option>Kawaii</option><option>Épique</option></select></label><div class="row"><label>BPM<input id="bpm" type="number" min="60" max="200" value="140"></label><label>Mesures<select id="bars"><option>16</option><option selected>32</option><option>64</option></select></label></div><label>Complexité <output id="complexityOut">65%</output><input id="complexity" type="range" min="10" max="100" value="65"></label><label>Seed<input id="seed" value="melodix-01"></label><div class="recommend"><div class="recommend-title">✦ Instruments conseillés</div><div id="instrumentAdvice"></div></div></div><div class="panel output-panel"><div class="head"><i>03</i><h2>Sortie</h2></div><div class="preview"><div class="preview-head"><span>MIDI PREVIEW</span><small id="previewMeta">32 mesures · 140 BPM</small></div><div class="preview-controls"><button id="playPreview">▶</button><span>Lecture de la composition générée</span><i id="playhead"></i></div><div class="timeline" id="timeline"></div></div><div id="tracks"></div><button class="generate" id="generate">✦ GÉNÉRER L'INSTRU</button><button class="secondary" id="all" disabled>Télécharger toutes les pistes</button><p id="status">Prêt à créer.</p></div></section><section id="features" class="features"><article><b>01</b><h3>100% MIDI</h3><p>Tu récupères des notes et des patterns, pas un fichier audio figé.</p></article><article><b>02</b><h3>Référence créative</h3><p>Le morceau de référence sert de direction musicale, pas de copie.</p></article><article><b>03</b><h3>Instruments conseillés</h3><p>Melodix propose une palette d'instruments adaptée au style choisi avant la génération.</p></article></section></main><footer><span>Melodix</span><span>Open source · Reqeuss</span></footer><script src="app.js"></script></body></html>
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Melodix — transforme une inspiration en composition MIDI originale.">
+<title>Melodix — MIDI Composition Engine</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="noise"></div>
+<header>
+  <a class="brand" href="#"><b>MX</b><span>Melodix</span></a>
+  <nav><a href="#generator">Generator</a><a href="#features">Features</a><a href="https://github.com/reqeuss/Melodix" target="_blank" rel="noreferrer">GitHub ↗</a></nav>
+</header>
+<main id="generator">
+<section class="hero">
+  <div class="eyebrow"><i></i> MIDI COMPOSITION ENGINE <span>LOCAL</span></div>
+  <h1>Une idée.<br><em>Une instru.</em></h1>
+  <p>Importe une référence, donne une direction à Melodix et génère une composition MIDI multi-pistes prête à ouvrir dans ton DAW.</p>
+  <div class="hero-pills"><span>100% MIDI</span><span>11 STYLES</span><span>5 TRACKS</span><span>NO API</span></div>
+</section>
+
+<section class="workspace">
+  <aside class="panel reference">
+    <div class="head"><i>01</i><div><small>INPUT</small><h2>Référence</h2></div></div>
+    <label class="drop" id="drop">
+      <input id="file" type="file" accept="audio/*">
+      <div class="upload-icon">↑</div>
+      <strong id="fileName">Dépose ton morceau</strong>
+      <span>MP3 · WAV · OGG · M4A</span>
+      <audio id="player" controls hidden></audio>
+    </label>
+    <div class="stats">
+      <div><small>DURÉE</small><b id="duration">—</b></div>
+      <div><small>FORMAT</small><b id="format">—</b></div>
+      <div><small>ÉTAT</small><b id="refState">VIDE</b></div>
+    </div>
+    <button class="ghost" id="clearRef" type="button">× Retirer la référence</button>
+  </aside>
+
+  <section class="panel direction">
+    <div class="head"><i>02</i><div><small>CREATIVE CONTROL</small><h2>Direction</h2></div></div>
+    <div class="select-wrap"><label>Style<select id="style"><option>Rap</option><option>Drill</option><option>Trap</option><option>Hyperpop</option><option>R&B</option><option>Pop</option><option>Phonk</option><option>Hard Techno</option><option>Lo-fi</option><option>Rock</option><option>Experimental</option></select></label></div>
+    <div class="grid2">
+      <label>Ambiance<select id="mood"><option>Mélancolique</option><option>Dark</option><option>Énergique</option><option>Planante</option><option>Kawaii</option><option>Épique</option></select></label>
+      <label>BPM<input id="bpm" type="number" min="60" max="200" value="140"></label>
+    </div>
+    <div class="grid2">
+      <label>Mesures<select id="bars"><option>16</option><option selected>32</option><option>64</option></select></label>
+      <label>Seed<input id="seed" value="melodix-01" maxlength="40"></label>
+    </div>
+    <label>Complexité <output id="complexityOut">65%</output><input id="complexity" type="range" min="10" max="100" value="65"></label>
+    <div class="recommend"><div class="recommend-title">✦ PALETTE CONSEILLÉE</div><div id="instrumentAdvice"></div></div>
+    <button class="generate" id="generate" type="button"><span>✦</span> GÉNÉRER L'INSTRU <kbd>ENTER</kbd></button>
+  </section>
+
+  <section class="panel output-panel">
+    <div class="head output-head"><div><i>03</i><small>OUTPUT</small><h2>Composition</h2></div><span id="statusBadge">READY</span></div>
+    <div class="empty-output" id="emptyOutput"><div>✦</div><b>Ta composition apparaîtra ici</b><span>Lance une génération pour afficher les MIDI.</span></div>
+    <div class="result" id="result" hidden>
+      <div class="transport">
+        <button id="playPreview" type="button">▶</button>
+        <div class="transport-info"><b id="transportTitle">Melodix composition</b><span id="previewMeta">32 mesures · 140 BPM</span></div>
+        <div class="transport-meter"><span id="playTime">00:00</span><div><i id="transportFill"></i></div></div>
+      </div>
+      <div class="piano" id="timeline"></div>
+      <div class="track-list" id="tracks"></div>
+      <div class="result-actions"><button class="secondary" id="all" disabled>↓ Télécharger les 5 MIDI</button><button class="secondary" id="regen" type="button">↻ Regénérer</button></div>
+    </div>
+  </section>
+</section>
+
+<section id="features" class="features">
+  <article><b>01</b><h3>Composition déterministe</h3><p>Le même style, seed et réglages donnent le même arrangement. Change la seed pour explorer.</p></article>
+  <article><b>02</b><h3>Piano-roll preview</h3><p>Visualise les notes générées et écoute une preview directement dans le navigateur.</p></article>
+  <article><b>03</b><h3>Prêt pour ton DAW</h3><p>Chaque piste est exportée séparément en MIDI standard, sans serveur ni API.</p></article>
+</section>
+</main>
+<footer><span>Melodix <b>0.2.0 prototype</b></span><span>Open source · Reqeuss</span></footer>
+<script src="app.js"></script>
+</body>
+</html>
