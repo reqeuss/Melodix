@@ -246,7 +246,7 @@ function renderAIPlan(plan,bpm,bars,style,energy,complexity){
     const chord=chordFor(prog);
     chord.forEach((p,i)=>{if(!intro||i===0)add(o.chords,bar*barTicks,p,hook?1880:1800,38+energy*.24)});
     for(const n of plan.bass.filter(x=>Number(x.bar)===src)){
-      if(brk&&Math.random()<.65)continue;
+      if(brk&&((bar*31+Number(n.beat)*17)%100)<65)continue;
       add(o.bass,bar*barTicks+Number(n.beat)*tick,degreePitch(Number(n.degree)||0,-12),Math.max(80,Number(n.length||2)*tick),Math.min(127,Number(n.velocity||80)+(hook?8:0)));
     }
     for(const n of plan.melody.filter(x=>Number(x.bar)===src)){
