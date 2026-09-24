@@ -451,7 +451,10 @@ function disposeTonePlayer(){
 function makeToneSynth(type,opts){
   const C=Tone[type];
   if(!C)throw new Error("Tone instrument unavailable: "+type);
-  if(type==="PolySynth")return new C(Tone.Synth,opts?.options||{});
+  if(type==="PolySynth"){
+    const voiceOptions={...(opts?.options||{})};
+    return new C(Tone.Synth,{...voiceOptions,maxPolyphony:16});
+  }
   return new C(opts||{});
 }
 
@@ -466,14 +469,15 @@ async function prepareTonePlayer(){
 
   const style=$('#style').value;
   const profile=synthProfiles[style]||synthProfiles.Rap;
-  const master=new Tone.Gain(.78).toDestination();
-  const comp=new Tone.Compressor({threshold:-18,ratio:3,attack:.01,release:.12}).connect(master);
+  const master=new Tone.Gain(.82).toDestination();
+  const comp=new Tone.Compressor({threshold:-20,ratio:3,attack:.01,release:.12}).connect(master);
   const tracks=[];
 
   for(const id of ['chords','melody','counter','arp']){
     const spec=profile[id==="chords"?"chord":id];
     const synth=makeToneSynth(spec[0],spec[1]);
     synth.connect(comp);
+    if(id==="counter"||id==="arp")synth.volume.value+=3;
     tracks.push(synth);
   }
 
@@ -482,32 +486,32 @@ async function prepareTonePlayer(){
     filter:{type:"lowpass",frequency:240,Q:1},
     envelope:{attack:.004,decay:.14,sustain:.5,release:.16},
     filterEnvelope:{attack:.001,decay:.08,sustain:.2,release:.12,baseFrequency:45,octaves:3},
-    volume:-5
+    volume:-3
   }).connect(comp);
 
   const kick=new Tone.MembraneSynth({
     pitchDecay:.02,octaves:5,
     envelope:{attack:.001,decay:.2,sustain:0,release:.05},
-    volume:-4
+    volume:-3
   }).connect(comp);
 
   const snare=new Tone.NoiseSynth({
     noise:{type:"white"},
     envelope:{attack:.001,decay:.08,sustain:0,release:.03},
-    volume:-11
+    volume:-9
   }).connect(comp);
 
   const hat=new Tone.MetalSynth({
     frequency:180,
     envelope:{attack:.001,decay:.025,release:.02},
     harmonicity:5.1,modulationIndex:28,resonance:2500,
-    volume:-19
+    volume:-17
   }).connect(comp);
 
   const clap=new Tone.NoiseSynth({
     noise:{type:"pink"},
     envelope:{attack:.001,decay:.1,sustain:0,release:.03},
-    volume:-15
+    volume:-13
   }).connect(comp);
 
   state.tone={ready:true,tracks,drums:[kick,snare,hat,clap],bass,master,transport:null,events:[],scheduledUntil:0};
@@ -518,45 +522,34 @@ function scheduleTonePreview(bpm,bars){
   const {tracks,bass,drums}=state.tone;
   const [kick,snare,hat,clap]=drums;
   const secPerTick=60/bpm/480;
-  const lead=0.08;
-  const base=Tone.now()+lead;
+  const base=Tone.now()+0.12;
   const events=[];
   let latest=base;
-
-  const schedule=(time,fn)=>{
-    const id=Tone.getContext().setTimeout(fn,Math.max(0,time-Tone.now()));
-    events.push(id);
-  };
 
   for(const n of state.notes){
     const tick=Math.max(0,Number(n.t)||0);
     const dur=Math.max(.025,Number(n.d||1)*secPerTick);
-    const velocity=Math.max(.04,Math.min(.9,(Number(n.v)||80)/127));
+    const velocity=Math.max(.08,Math.min(1,(Number(n.v)||80)/127));
     const time=base+tick*secPerTick;
     latest=Math.max(latest,time+dur);
 
-    schedule(time,()=>{
-      if(!state.playing)return;
-      try{
-        if(n.track==="bass"){
-          bass.triggerAttackRelease(noteName(n.p),dur,undefined,velocity);
-          return;
-        }
-        if(n.track==="drums"){
-          const p=Number(n.p);
-          if(p===36)kick.triggerAttackRelease("C1",dur,undefined,velocity);
-          else if(p===38||p===40)snare.triggerAttackRelease(dur,undefined,velocity);
-          else if(p===42||p===44||p===46)hat.triggerAttackRelease(dur,undefined,velocity);
-          else clap.triggerAttackRelease(dur,undefined,velocity);
-          return;
-        }
+    try{
+      if(n.track==="bass"){
+        bass.triggerAttackRelease(noteName(n.p),dur,time,velocity);
+      }else if(n.track==="drums"){
+        const p=Number(n.p);
+        if(p===36)kick.triggerAttackRelease("C1",dur,time,velocity);
+        else if(p===38||p===40)snare.triggerAttackRelease(dur,time,velocity);
+        else if(p===42||p===44||p===46)hat.triggerAttackRelease(dur,time,velocity);
+        else clap.triggerAttackRelease(dur,time,velocity);
+      }else{
         const idx={chords:0,melody:1,counter:2,arp:3}[n.track];
         const synth=tracks[idx??1];
-        synth.triggerAttackRelease(noteName(n.p),dur,undefined,velocity);
-      }catch(err){
-        console.warn("Melodix note skipped",err);
+        synth.triggerAttackRelease(noteName(n.p),dur,time,velocity);
       }
-    });
+    }catch(err){
+      console.warn("Melodix note skipped",n.track,n.p,err);
+    }
   }
 
   state.tone.events=events;
