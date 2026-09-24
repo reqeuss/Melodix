@@ -428,7 +428,7 @@ const synthProfiles={
   Experimental:{chord:["PolySynth",{voice:"Synth",options:{oscillator:{type:"fatsawtooth",spread:25,count:3},envelope:{attack:.03,decay:.35,sustain:.45,release:.8},volume:-20}}],melody:["FMSynth",{harmonicity:3,modulationIndex:10,volume:-14}],counter:["AMSynth",{volume:-21}],arp:["PluckSynth",{volume:-16}]}
 };
 
-state.tone={ready:false,tracks:[],drums:[],bass:null,master:null,parts:[]};
+state.tone={ready:false,tracks:[],drums:[],bass:null,master:null,parts:[],transport:null};
 
 function disposeTonePlayer(){
   if(!window.Tone)return;
@@ -438,7 +438,7 @@ function disposeTonePlayer(){
   for(const x of state.tone.drums||[])try{x.dispose()}catch{}
   if(state.tone.bass)try{state.tone.bass.dispose()}catch{}
   if(state.tone.master)try{state.tone.master.dispose()}catch{}
-  state.tone={ready:false,tracks:[],drums:[],bass:null,master:null,parts:[]};
+  state.tone={ready:false,tracks:[],drums:[],bass:null,master:null,parts:[],transport:null};
 }
 
 function makeToneSynth(type,opts){
@@ -501,12 +501,12 @@ async function prepareTonePlayer(){
     volume:-15
   }).connect(comp);
 
-  state.tone={ready:true,tracks,drums:[kick,snare,hat,clap],bass,master,parts:[]};
+  state.tone={ready:true,tracks,drums:[kick,snare,hat,clap],bass,master,parts:[],transport:Tone.getTransport()};
   return {transport:Tone.getTransport(),tracks,bass,kick,snare,hat,clap};
 }
 
 function scheduleTonePreview(bpm,bars){
-  const {transport,tracks,bass,kick,snare,hat,clap}=state.tone;
+  const {tracks,bass,kick,snare,hat,clap}=state.tone;\n  const transport=Tone.getTransport();
   const secPerTick=60/bpm/480;
 
   transport.stop();
