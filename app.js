@@ -468,10 +468,64 @@ function play808Preview(bpm){
   }
 }
 async function playNativePreview(bpm){
-  const c=state.audioCtx;if(!c||c.state!=='running')throw new Error('AudioContext unavailable');
+  const c=state.audioCtx;if(!c)throw new Error('AudioContext unavailable');
+  if(c.state!=='running')await c.resume();
+  if(c.state!=='running')throw new Error('AudioContext blocked by browser');
   await Promise.all(['chords','melody','counter','arp'].map(t=>playSampledTrack(t,bpm)));
   await playDrumSoundfont(bpm);
   play808Preview(bpm);
+}
+
+async function playPreview(){
+  if(!state.notes.length){
+    $('#statusBadge').textContent='NOTHING TO PLAY';
+    return;
+  }
+  state.playing=true;
+  $('#playPreview').textContent='■';
+  $('#statusBadge').textContent='LOADING PLAYER…';
+  try{
+    // Browsers require audio to be resumed from the user's click.
+    // SoundFont uses this same native AudioContext.
+    if(!state.audioCtx){
+      const AC=window.AudioContext||window.webkitAudioContext;
+      if(!AC)throw new Error('Web Audio API unavailable');
+      state.audioCtx=new AC();
+    }
+    if(state.audioCtx.state!=='running')await state.audioCtx.resume();
+    if(state.audioCtx.state!=='running')throw new Error('AudioContext blocked');
+    const bpm=Math.max(60,Math.min(200,+$('#bpm').value||140));
+    const bars=Math.max(1,+$('#bars').value||16);
+    const duration=bars*4*60/bpm;
+    $('#statusBadge').textContent='PLAYING';
+    $('#transportFill').style.width='0%';
+    $('#playTime').textContent='00:00';
+    await playNativePreview(bpm);
+    if(!state.playing)return;
+    const started=performance.now();
+    clearInterval(state.timer);
+    state.timer=setInterval(()=>{
+      if(!state.playing)return;
+      const elapsed=Math.min(duration,(performance.now()-started)/1000);
+      $('#transportFill').style.width=Math.min(100,elapsed/duration*100)+'%';
+      $('#playTime').textContent=fmt(elapsed);
+      if(elapsed>=duration){
+        stopPreview();
+        $('#statusBadge').textContent='GENERATED';
+      }
+    },50);
+  }catch(e){
+    console.error('Melodix preview:',e);
+    state.playing=false;
+    clearInterval(state.timer);state.timer=null;
+    Object.values(state.players).forEach(p=>{try{p.stop()}catch{}});
+    state.players={};
+    $('#playPreview').textContent='▶';
+    $('#statusBadge').textContent='PLAYER ERROR';
+    $('#playTime').textContent='00:00';
+    $('#transportFill').style.width='0%';
+    // Keep the error visible in the browser console without breaking MIDI export.
+  }
 }
 function stopPreview(){state.playing=false;clearInterval(state.timer);state.timer=null;Object.values(state.players).forEach(p=>{try{p.stop()}catch{}});state.players={};if(state.drumCtx){try{state.drumCtx.close()}catch{}state.drumCtx=null}if(state.audioCtx&&state.audioCtx.state==='running'){try{state.audioCtx.suspend()}catch{}}$('#playPreview').textContent='▶';$('#transportFill').style.width='0%';$('#playTime').textContent='00:00'}
 async function generate(){
