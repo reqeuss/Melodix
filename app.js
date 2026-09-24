@@ -211,7 +211,7 @@ function setCreationMode(mode){creationMode=mode;const ref=mode==='reference';$(
 let browserMusicAI=null;
 let browserMusicAIContextBars=0;
 const BROWSER_AI_CHECKPOINTS={
-  deep:'https://storage.googleapis.com/magentadata/js/checkpoints/music_vae/hierdec-trio_16bar',
+  deep:'https://storage.googleapis.com/magentadata/js/checkpoints/music_vae/trio_16bar',
   fallback:'https://storage.googleapis.com/magentadata/js/checkpoints/music_vae/trio_4bar'
 };
 
