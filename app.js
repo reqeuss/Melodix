@@ -147,7 +147,8 @@ function compose(){
       if(!lastBass||Math.abs(p-lastBass)<19||chance(.7)){add(o.bass,t,p+octaveJump,d,isAccent?92:72+energy*18);lastBass=p;}
     }
     if((hook||pre)&&chance(.6))add(o.bass,base+1680,root-12+(chance(.35)?12:0),150,62);
-    const kick=drumPattern;    for(let s=0;s<16;s++){
+    const kick=drumPattern;
+    for(let s=0;s<16;s++){
       const t=base+s*step;
       let hit=kick.includes(s);
       if(style==='Hard Techno')hit=s%2===0;
@@ -296,7 +297,8 @@ function renderBrowserAISequence(sample,bars,bpm,energy,complexity){
         // Controlled octave/register variation prevents a copied loop from sounding flat.
         if(track==='melody'&&section==='hook'&&r()<.16)p+=12;
         if(track==='bass'&&section==='hook'&&r()<.10)p+=12;
-        p=Math.max(0,Math.min(127,p));        const v=Math.max(1,Math.min(127,(n.velocity||80)+(energy-50)*.18+(r()-.5)*7));
+        p=Math.max(0,Math.min(127,p));
+        const v=Math.max(1,Math.min(127,(n.velocity||80)+(energy-50)*.18+(r()-.5)*7));
         add(o[track],t+Math.round((r()-.5)*Math.min(16,d*.06)),p,d,v,track==='drums'?9:0);
       }
     }
@@ -446,6 +448,7 @@ const synthProfiles={
 };
 
 state.tone={ready:false,tracks:[],drums:[],bass:null,master:null,transport:null,events:[],scheduledUntil:0};
+
 function disposeTonePlayer(){
   if(!window.Tone)return;
   try{
@@ -566,231 +569,60 @@ function scheduleTonePreview(bpm,bars){
     const time=base+tick*secPerTick;
     latest=Math.max(latest,time+dur);
 
-/* =========================
-   MELODIX UI / APP BOOT
-   Rebuilt as a defensive single-page controller.
-   ========================= */
+    try{
+      if(n.track==="bass"){
+        bass.triggerAttackRelease(midiToFrequency(n.p),dur,time,velocity);
+      }else if(n.track==="drums"){
+        const p=Number(n.p);
+        if(p===36)kick.triggerAttackRelease("C1",dur,time,velocity);
+        else if(p===38||p===40)snare.triggerAttackRelease(dur,time,velocity);
+        else if(p===42||p===44||p===46)hat.triggerAttackRelease(dur,time,velocity);
+        else clap.triggerAttackRelease(dur,time,velocity);
+      }else{
+        const idx={chords:0,melody:1,counter:2,arp:3}[n.track];
+        const synth=tracks[idx??1];
+        synth.triggerAttackRelease(midiToFrequency(n.p),dur,time,velocity);
+      }
+    }catch(err){
+      console.warn("Melodix note skipped",n.track,n.p,err);
+    }
+  }
 
-function setStatus(text){
-  const el=$('#statusBadge');
-  if(el)el.textContent=text;
+  state.tone.events=events;
+  state.tone.scheduledUntil=latest;
+  return Math.max(0,latest-base);
 }
-function setBusy(busy){
-  const b=$('#generate');
-  if(!b)return;
-  b.disabled=busy;
-  b.classList.toggle('is-loading',busy);
-  b.setAttribute('aria-busy',String(busy));
-}
-function showResult(){
-  const empty=$('#emptyOutput'),result=$('#result');
-  if(empty)empty.hidden=true;
-  if(result)result.hidden=false;
-}
-function syncOutputs(){
-  const e=$('#energy'),eo=$('#energyOut'),c=$('#complexity'),co=$('#complexityOut');
-  if(eo&&e)eo.textContent=e.value+'%';
-  if(co&&c)co.textContent=c.value+'%';
-}
-function syncSessionMeta(){
-  const bars=$('#bars')?.value||32,bpm=$('#bpm')?.value||140;
-  if($('#previewMeta'))$('#previewMeta').textContent=bars+' mesures · '+bpm+' BPM';
-  if($('#playerDuration'))$('#playerDuration').textContent=fmt((bars*4*60)/bpm);
-}
-function renderAll(){
-  renderAdvice();
-  renderTracks();
-  renderPreview();
-  renderTrackDownloads();
-  syncOutputs();
-  syncSessionMeta();
-}
-function resetOutput(){
-  state.generated={};
-  state.notes=[];
-  state.playing=false;
-  try{disposeTonePlayer()}catch{}
-  const result=$('#result'),empty=$('#emptyOutput');
-  if(result)result.hidden=true;
-  if(empty){
-    empty.hidden=false;
-    empty.innerHTML='<div class="empty-logo">♪</div><b>Nothing here yet</b><span>Choisis un mode et lance une génération.</span>';
-  }
-  if($('#all'))$('#all').disabled=true;
-  if($('#zip'))$('#zip').disabled=true;
-  if($('#timeline'))$('#timeline').innerHTML='';
-  if($('#tracks'))$('#tracks').innerHTML='';
-  if($('#trackDownloads'))$('#trackDownloads').innerHTML='';
-  if($('#playPreview'))$('#playPreview').textContent='▶';
-  if($('#transportFill'))$('#transportFill').style.width='0%';
-  if($('#playTime'))$('#playTime').textContent='00:00';
-}
-async function generateSession(){
-  if(state.playing)stopPreview();
-  setBusy(true);
-  setStatus('COMPOSITION…');
-  try{
-    const refMode=creationMode==='reference' && !!state.reference;
-    let generated=null;
-    if(refMode){
-      setStatus('ANALYSE AUDIO…');
-      try{
-        const ns=await transcribeReference();
-        generated=composeFromTranscription(ns);
-      }catch(err){
-        console.warn('Melodix transcription fallback:',err);
-        generated=compose();
-      }
-    }else{
-      try{
-        generated=await composeWithBrowserAI();
-      }catch(err){
-        console.warn('Melodix browser AI fallback:',err);
-        generated=compose();
-      }
-    }
-    state.generated=generated||compose();
-    showResult();
-    renderAll();
-    if($('#all'))$('#all').disabled=!state.generated.full;
-    if($('#zip'))$('#zip').disabled=!state.generated.full;
-    setStatus('READY · '+Object.keys(state.generated).filter(x=>x!=='full').length+' PISTES');
-    if($('#transportTitle'))$('#transportTitle').textContent=($('#style')?.value||'Rap')+' · '+($('#mood')?.value||'Instrumental');
-  }catch(err){
-    console.error('Melodix generation failed:',err);
-    setStatus('ERREUR');
-    const empty=$('#emptyOutput');
-    if(empty){
-      empty.hidden=false;
-      empty.innerHTML='<div class="empty-logo">!</div><b>La génération a échoué</b><span>'+String(err?.message||err).replace(/[<>]/g,'')+'</span>';
-    }
-  }finally{
-    setBusy(false);
-  }
-}
-function stopPreview(){
-  state.playing=false;
-  try{
-    if(state.tone){
-      for(const x of state.tone.tracks||[])x.releaseAll?.();
-      for(const x of state.tone.drums||[])x.releaseAll?.();
-      state.tone.bass?.triggerRelease?.();
-    }
-  }catch{}
-  if(state.timer){clearInterval(state.timer);state.timer=null}
-  if($('#playPreview'))$('#playPreview').textContent='▶';
-  if($('#transportFill'))$('#transportFill').style.width='0%';
-  if($('#playTime'))$('#playTime').textContent='00:00';
-  if(state.notes.length)setStatus('READY');
-}
+
 async function playPreview(){
-  if(!state.notes.length){setStatus('GENERATE FIRST');return}
-  if(state.playing){stopPreview();return}
+  if(!state.notes.length){
+    $('#statusBadge').textContent='NOTHING TO PLAY';
+    return;
+  }
+  if(state.playing){
+    stopPreview();
+    return;
+  }
+
   try{
-    setStatus('STARTING AUDIO…');
-    await prepareTonePlayer();
-    const bpm=Math.max(60,Math.min(200,+$('#bpm').value||140));
-    const bars=+$('#bars').value||32;
-    const duration=scheduleTonePreview(bpm,bars);
+    $('#statusBadge').textContent='STARTING AUDIO…';
+    await Tone.start();
+
     state.playing=true;
-    if($('#playPreview'))$('#playPreview').textContent='■';
-    const started=performance.now();
-    if(state.timer)clearInterval(state.timer);
-    state.timer=setInterval(()=>{
-      const elapsed=Math.min(duration,(performance.now()-started)/1000);
-      const pct=duration?elapsed/duration:1;
-      if($('#playTime'))$('#playTime').textContent=fmt(elapsed);
-      if($('#transportFill'))$('#transportFill').style.width=(pct*100)+'%';
-      if(elapsed>=duration){stopPreview()}
-    },50);
-    setStatus('PLAYING');
-  }catch(err){
-    console.error('Melodix playback failed:',err);
-    state.playing=false;
-    if($('#playPreview'))$('#playPreview').textContent='▶';
-    setStatus('AUDIO ERROR');
-  }
-}
-function bindUI(){
-  const modeRef=$('#modeReference'),modeImagine=$('#modeImagine');
-  if(modeRef)modeRef.addEventListener('click',()=>setCreationMode('reference'));
-  if(modeImagine)modeImagine.addEventListener('click',()=>setCreationMode('imagine'));
+    $('#playPreview').textContent='■';
 
-  const file=$('#file'),drop=$('#drop');
-  if(file)file.addEventListener('change',e=>loadReference(e.target.files?.[0]));
-  if(drop){
-    for(const type of ['dragenter','dragover'])drop.addEventListener(type,e=>{e.preventDefault();drop.classList.add('dragging')});
-    for(const type of ['dragleave','drop'])drop.addEventListener(type,e=>{e.preventDefault();drop.classList.remove('dragging')});
-    drop.addEventListener('drop',e=>{const f=e.dataTransfer?.files?.[0];if(f)loadReference(f)});
-  }
-  const clear=$('#clearRef');
-  if(clear)clear.addEventListener('click',()=>{
-    if(state.reference?.url)URL.revokeObjectURL(state.reference.url);
-    state.reference=null;state.inspiration=null;
-    if(file)file.value='';
-    const p=$('#player');if(p){p.pause();p.removeAttribute('src');p.hidden=true;try{p.load()}catch{}}
-    if($('#fileName'))$('#fileName').textContent='Dépose ton audio';
-    if($('#duration'))$('#duration').textContent='—';
-    if($('#format'))$('#format').textContent='—';
-    if($('#refState'))$('#refState').textContent='AUTO';
-    if($('#analysisText'))$('#analysisText').textContent='En attente d\'une référence';
-    if($('#analysisBadge'))$('#analysisBadge').textContent=creationMode==='reference'?'WAIT':'AUTO';
-  });
+    const bpm=Math.max(60,Math.min(200,+$('#bpm').value||140));
 
-  const gen=$('#generate');if(gen)gen.addEventListener('click',generateSession);
-  const play=$('#playPreview');if(play)play.addEventListener('click',playPreview);
-  const all=$('#all');if(all)all.addEventListener('click',()=>downloadTrack('full'));
-  const zip=$('#zip');if(zip)zip.addEventListener('click',downloadZip);
-  const regen=$('#regen');if(regen)regen.addEventListener('click',generateSession);
-  const random=$('#randomSeed');if(random)random.addEventListener('click',()=>{$('#seed').value=randomSeed()});
-
-  document.querySelectorAll('.quick').forEach(b=>b.addEventListener('click',()=>{
-    const s=b.dataset.style;
-    const select=$('#style');
-    if(select&&[...select.options].some(o=>o.value===s)){select.value=s;select.dispatchEvent(new Event('change',{bubbles:true}))}
-  }));
-  const style=$('#style');
-  if(style)style.addEventListener('change',()=>{renderAdvice();renderTracks()});
-  for(const id of ['energy','complexity','bpm','bars']){
-    const el=$('#'+id);
-    if(el)el.addEventListener('input',()=>{syncOutputs();syncSessionMeta();if(id==='bars'||id==='bpm')renderPreview()});
-    if(el)el.addEventListener('change',()=>{syncOutputs();syncSessionMeta();if(id==='bars'||id==='bpm')renderPreview()});
-  }
-  document.addEventListener('keydown',e=>{
-    if(e.key==='Enter'&&e.target?.tagName!=='INPUT'&&e.target?.tagName!=='SELECT'&&e.target?.tagName!=='TEXTAREA'){
-      e.preventDefault();generateSession();
-    }
-  });
-}
-function setCreationMode(mode){
-  creationMode=mode==='reference'?'reference':'imagine';
-  const ref=creationMode==='reference';
-  $('#modeReference')?.classList.toggle('active',ref);
-  $('#modeImagine')?.classList.toggle('active',!ref);
-  const pipeline=$('#pipeline');
-  if(pipeline)pipeline.innerHTML=ref?'<span class="active">Audio</span><i>→</i><span>IA Analyse</span><i>→</i><span>MIDI</span><i>→</i><span>Instru</span>':'<span class="active">Seed</span><i>→</i><span>IA Imagine</span><i>→</i><span>Arrangement</span><i>→</i><span>Instru</span>';
-  const source=$('.source-panel');
-  if(source)source.style.opacity=ref?'1':'.62';
-  const text=$('#analysisText');
-  if(text)text.textContent=ref?(state.reference?'Référence prête · analyse musicale disponible':'En attente d\'une référence'):'Aucune référence nécessaire · moteur autonome';
-  const badge=$('#analysisBadge');
-  if(badge)badge.textContent=ref?(state.reference?'READY':'WAIT'):'AUTO';
-  const gen=$('#generate');
-  if(gen)gen.innerHTML=ref?'<span>✦</span> ANALYSER & CRÉER <kbd>ENTER</kbd>':'<span>✦</span> IMAGINER L\'INSTRUMENTALE <kbd>ENTER</kbd>';
-}
-function bootMelodix(){
-  try{
-    bindUI();
-    renderAdvice();
-    renderTracks();
-    syncOutputs();
-    syncSessionMeta();
-    setCreationMode('reference');
-    setStatus('READY');
-  }catch(err){
-    console.error('Melodix boot failed:',err);
-    setStatus('BOOT ERROR');
-  }
-}
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bootMelodix,{once:true});
-else bootMelodix();
+/* ===== MELodix APP CONTROLLER ===== */
+function setStatus(text){const el=$('#statusBadge');if(el)el.textContent=text}
+function setBusy(busy){const b=$('#generate');if(!b)return;b.disabled=busy;b.classList.toggle('is-loading',busy);b.setAttribute('aria-busy',String(busy))}
+function showResult(){const e=$('#emptyOutput'),r=$('#result');if(e)e.hidden=true;if(r)r.hidden=false}
+function syncOutputs(){const e=$('#energy'),eo=$('#energyOut'),c=$('#complexity'),co=$('#complexityOut');if(eo&&e)eo.textContent=e.value+'%';if(co&&c)co.textContent=c.value+'%'}
+function syncSessionMeta(){const bars=$('#bars')?.value||32,bpm=$('#bpm')?.value||140;if($('#previewMeta'))$('#previewMeta').textContent=bars+' mesures · '+bpm+' BPM';if($('#playerDuration'))$('#playerDuration').textContent=fmt((bars*4*60)/bpm)}
+function renderAll(){renderAdvice();renderTracks();renderPreview();renderTrackDownloads();syncOutputs();syncSessionMeta()}
+function stopPreview(){state.playing=false;try{for(const x of state.tone?.tracks||[])x.releaseAll?.();for(const x of state.tone?.drums||[])x.releaseAll?.();state.tone?.bass?.triggerRelease?.()}catch{}if(state.timer){clearInterval(state.timer);state.timer=null}if($('#playPreview'))$('#playPreview').textContent='▶';if($('#transportFill'))$('#transportFill').style.width='0%';if($('#playTime'))$('#playTime').textContent='00:00';if(state.notes.length)setStatus('READY')}
+async function playPreview(){if(!state.notes.length){setStatus('GENERATE FIRST');return}if(state.playing){stopPreview();return}try{setStatus('STARTING AUDIO…');await prepareTonePlayer();const bpm=Math.max(60,Math.min(200,+$('#bpm').value||140));const bars=+$('#bars').value||32;const duration=scheduleTonePreview(bpm,bars);state.playing=true;if($('#playPreview'))$('#playPreview').textContent='■';const started=performance.now();if(state.timer)clearInterval(state.timer);state.timer=setInterval(()=>{const elapsed=Math.min(duration,(performance.now()-started)/1000);const pct=duration?elapsed/duration:1;if($('#playTime'))$('#playTime').textContent=fmt(elapsed);if($('#transportFill'))$('#transportFill').style.width=(pct*100)+'%';if(elapsed>=duration)stopPreview()},50);setStatus('PLAYING')}catch(err){console.error('Melodix playback failed:',err);state.playing=false;if($('#playPreview'))$('#playPreview').textContent='▶';setStatus('AUDIO ERROR')}}
+async function generateSession(){if(state.playing)stopPreview();setBusy(true);setStatus('COMPOSITION…');try{let generated=null;if(creationMode==='reference'&&state.reference){setStatus('ANALYSE AUDIO…');try{generated=composeFromTranscription(await transcribeReference())}catch(err){console.warn('Transcription fallback:',err);generated=compose()}}else{try{generated=await composeWithBrowserAI()}catch(err){console.warn('Browser AI fallback:',err);generated=compose()}}state.generated=generated||compose();showResult();renderAll();if($('#all'))$('#all').disabled=!state.generated.full;if($('#zip'))$('#zip').disabled=!state.generated.full;setStatus('READY · '+Object.keys(state.generated).filter(x=>x!=='full').length+' PISTES');if($('#transportTitle'))$('#transportTitle').textContent=($('#style')?.value||'Rap')+' · '+($('#mood')?.value||'Instrumental')}catch(err){console.error('Generation failed:',err);setStatus('ERREUR');const e=$('#emptyOutput');if(e){e.hidden=false;e.innerHTML='<div class="empty-logo">!</div><b>La génération a échoué</b><span>'+String(err?.message||err).replace(/[<>]/g,'')+'</span>'}}finally{setBusy(false)}}
+function setCreationMode(mode){creationMode=mode==='reference'?'reference':'imagine';const ref=creationMode==='reference';$('#modeReference')?.classList.toggle('active',ref);$('#modeImagine')?.classList.toggle('active',!ref);const p=$('#pipeline');if(p)p.innerHTML=ref?'<span class="active">Audio</span><i>→</i><span>IA Analyse</span><i>→</i><span>MIDI</span><i>→</i><span>Instru</span>':'<span class="active">Seed</span><i>→</i><span>IA Imagine</span><i>→</i><span>Arrangement</span><i>→</i><span>Instru</span>';const source=$('.source-panel');if(source)source.style.opacity=ref?'1':'.62';const t=$('#analysisText');if(t)t.textContent=ref?(state.reference?'Référence prête · analyse musicale disponible':'En attente d\'une référence'):'Aucune référence nécessaire · moteur autonome';const b=$('#analysisBadge');if(b)b.textContent=ref?(state.reference?'READY':'WAIT'):'AUTO';const g=$('#generate');if(g)g.innerHTML=ref?'<span>✦</span> ANALYSER & CRÉER <kbd>ENTER</kbd>':'<span>✦</span> IMAGINER L\'INSTRUMENTALE <kbd>ENTER</kbd>'}
+function bindUI(){const mr=$('#modeReference'),mi=$('#modeImagine');mr?.addEventListener('click',()=>setCreationMode('reference'));mi?.addEventListener('click',()=>setCreationMode('imagine'));const file=$('#file'),drop=$('#drop');file?.addEventListener('change',e=>loadReference(e.target.files?.[0]));if(drop){['dragenter','dragover'].forEach(x=>drop.addEventListener(x,e=>{e.preventDefault();drop.classList.add('dragging')}));['dragleave','drop'].forEach(x=>drop.addEventListener(x,e=>{e.preventDefault();drop.classList.remove('dragging')}));drop.addEventListener('drop',e=>{const f=e.dataTransfer?.files?.[0];if(f)loadReference(f)})}$('#clearRef')?.addEventListener('click',()=>{if(state.reference?.url)URL.revokeObjectURL(state.reference.url);state.reference=null;state.inspiration=null;if(file)file.value='';const p=$('#player');if(p){p.pause();p.removeAttribute('src');p.hidden=true;try{p.load()}catch{}}if($('#fileName'))$('#fileName').textContent='Dépose ton audio';if($('#duration'))$('#duration').textContent='—';if($('#format'))$('#format').textContent='—';if($('#refState'))$('#refState').textContent='AUTO';setCreationMode(creationMode)});$('#generate')?.addEventListener('click',generateSession);$('#regen')?.addEventListener('click',generateSession);$('#playPreview')?.addEventListener('click',playPreview);$('#all')?.addEventListener('click',()=>downloadTrack('full'));$('#zip')?.addEventListener('click',downloadZip);$('#randomSeed')?.addEventListener('click',()=>{$('#seed').value=randomSeed()});document.querySelectorAll('.quick').forEach(b=>b.addEventListener('click',()=>{const s=b.dataset.style,sel=$('#style');if(sel&&[...sel.options].some(o=>o.value===s)){sel.value=s;sel.dispatchEvent(new Event('change',{bubbles:true))}}));$('#style')?.addEventListener('change',()=>{renderAdvice();renderTracks()});for(const id of ['energy','complexity','bpm','bars']){$('#'+id)?.addEventListener('input',()=>{syncOutputs();syncSessionMeta();if(id==='bars'||id==='bpm')renderPreview()});$('#'+id)?.addEventListener('change',()=>{syncOutputs();syncSessionMeta();if(id==='bars'||id==='bpm')renderPreview()})}document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target?.tagName!=='INPUT'&&e.target?.tagName!=='SELECT'&&e.target?.tagName!=='TEXTAREA'){e.preventDefault();generateSession()}})}
+function bootMelodix(){try{bindUI();renderAdvice();renderTracks();syncOutputs();syncSessionMeta();setCreationMode('reference');setStatus('READY')}catch(err){console.error('Melodix boot failed:',err);setStatus('BOOT ERROR')}}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bootMelodix,{once:true});else bootMelodix();
