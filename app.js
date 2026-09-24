@@ -428,17 +428,22 @@ const synthProfiles={
   Experimental:{chord:["PolySynth",{voice:"Synth",options:{oscillator:{type:"fatsawtooth",spread:25,count:3},envelope:{attack:.03,decay:.35,sustain:.45,release:.8},volume:-20}}],melody:["FMSynth",{harmonicity:3,modulationIndex:10,volume:-14}],counter:["AMSynth",{volume:-21}],arp:["PluckSynth",{volume:-16}]}
 };
 
-state.tone={ready:false,tracks:[],drums:[],bass:null,master:null,parts:[],transport:null};
+state.tone={ready:false,tracks:[],drums:[],bass:null,master:null,transport:null,events:[]};
+
+function getMelodixTransport(){
+  if(!window.Tone)throw new Error("Tone.js unavailable");
+  return typeof Tone.getTransport==="function"?Tone.getTransport():Tone.Transport;
+}
 
 function disposeTonePlayer(){
   if(!window.Tone)return;
-  try{Tone.getTransport().stop();Tone.getTransport().cancel(0)}catch{}
-  for(const part of state.tone.parts||[])try{part.dispose()}catch{}
+  try{const t=getMelodixTransport();t.stop();t.cancel(0)}catch{}
+  for(const id of state.tone.events||[])try{getMelodixTransport().clear(id)}catch{}
   for(const x of state.tone.tracks||[])try{x.dispose()}catch{}
   for(const x of state.tone.drums||[])try{x.dispose()}catch{}
   if(state.tone.bass)try{state.tone.bass.dispose()}catch{}
   if(state.tone.master)try{state.tone.master.dispose()}catch{}
-  state.tone={ready:false,tracks:[],drums:[],bass:null,master:null,parts:[],transport:null};
+  state.tone={ready:false,tracks:[],drums:[],bass:null,master:null,transport:null,events:[]};
 }
 
 function makeToneSynth(type,opts){
@@ -452,10 +457,11 @@ async function prepareTonePlayer(){
   if(!window.Tone)throw new Error("Tone.js unavailable");
   await Tone.start();
   const ctx=Tone.getContext();
-  if(ctx.state!=="running")await ctx.resume();
+  if(ctx.state!=="running"&&ctx.resume)await ctx.resume();
   if(ctx.state!=="running")throw new Error("AudioContext is not running");
-  disposeTonePlayer();
 
+  disposeTonePlayer();
+  const transport=getMelodixTransport();
   const style=$('#style').value,profile=synthProfiles[style]||synthProfiles.Rap;
   const master=new Tone.Gain(.78).toDestination();
   const comp=new Tone.Compressor({threshold:-18,ratio:3,attack:.01,release:.12}).connect(master);
@@ -476,38 +482,18 @@ async function prepareTonePlayer(){
     volume:-5
   }).connect(comp);
 
-  const kick=new Tone.MembraneSynth({
-    pitchDecay:.02,octaves:5,
-    envelope:{attack:.001,decay:.2,sustain:0,release:.05},
-    volume:-4
-  }).connect(comp);
+  const kick=new Tone.MembraneSynth({pitchDecay:.02,octaves:5,envelope:{attack:.001,decay:.2,sustain:0,release:.05},volume:-4}).connect(comp);
+  const snare=new Tone.NoiseSynth({noise:{type:"white"},envelope:{attack:.001,decay:.08,sustain:0,release:.03},volume:-11}).connect(comp);
+  const hat=new Tone.MetalSynth({frequency:180,envelope:{attack:.001,decay:.025,release:.02},harmonicity:5.1,modulationIndex:28,resonance:2500,volume:-19}).connect(comp);
+  const clap=new Tone.NoiseSynth({noise:{type:"pink"},envelope:{attack:.001,decay:.1,sustain:0,release:.03},volume:-15}).connect(comp);
 
-  const snare=new Tone.NoiseSynth({
-    noise:{type:"white"},
-    envelope:{attack:.001,decay:.08,sustain:0,release:.03},
-    volume:-11
-  }).connect(comp);
-
-  const hat=new Tone.MetalSynth({
-    frequency:180,
-    envelope:{attack:.001,decay:.025,release:.02},
-    harmonicity:5.1,modulationIndex:28,resonance:2500,
-    volume:-19
-  }).connect(comp);
-
-  const clap=new Tone.NoiseSynth({
-    noise:{type:"pink"},
-    envelope:{attack:.001,decay:.1,sustain:0,release:.03},
-    volume:-15
-  }).connect(comp);
-
-  state.tone={ready:true,tracks,drums:[kick,snare,hat,clap],bass,master,parts:[],transport:Tone.getTransport()};
-  return {transport:Tone.getTransport(),tracks,bass,kick,snare,hat,clap};
+  state.tone={ready:true,tracks,drums:[kick,snare,hat,clap],bass,master,transport,events:[]};
+  return state.tone;
 }
 
 function scheduleTonePreview(bpm,bars){
-  const {tracks,bass,kick,snare,hat,clap}=state.tone;\n  const transport=Tone.getTransport();
-  const secPerTick=60/bpm/480;
+  const {transport,tracks,bass,drums}=state.tone;
+  if(!transport)throw new Error("Tone Transport unavailable");
 
   transport.stop();
   transport.cancel(0);
@@ -515,65 +501,53 @@ function scheduleTonePreview(bpm,bars){
   transport.timeSignature=4;
   transport.position="0:0:0";
 
-  const parts=[];
+  const [kick,snare,hat,clap]=drums;
+  const secPerTick=60/bpm/480;
+  const events=[];
 
-  const schedule=(tick,callback)=>{
-    const seconds=Math.max(0,tick*secPerTick);
-    const id=transport.schedule(callback,seconds);
-    return id;
+  const atTick=(tick,fn)=>{
+    const id=transport.schedule(fn,Math.max(0,tick)*secPerTick);
+    events.push(id);
   };
 
   for(const n of state.notes){
     const tick=Math.max(0,Number(n.t)||0);
     const dur=Math.max(.025,Number(n.d||1)*secPerTick);
-    const velocity=Math.max(.05,Math.min(.9,(Number(n.v)||80)/127));
+    const velocity=Math.max(.04,Math.min(.9,(Number(n.v)||80)/127));
 
-    if(n.track==="bass"){
-      schedule(tick,time=>{
-        if(state.playing)bass.triggerAttackRelease(noteName(n.p),dur,time,velocity);
-      });
-      continue;
-    }
-
-    if(n.track==="drums"){
-      const p=Number(n.p);
-      schedule(tick,time=>{
-        if(!state.playing)return;
-        if(p===36)kick.triggerAttackRelease("C1",dur,time,velocity);
-        else if(p===38||p===40)snare.triggerAttackRelease(dur,time,velocity);
-        else if(p===42||p===44||p===46)hat.triggerAttackRelease(dur,time,velocity);
-        else clap.triggerAttackRelease(dur,time,velocity);
-      });
-      continue;
-    }
-
-    const idx={chords:0,melody:1,counter:2,arp:3}[n.track];
-    const synth=tracks[idx??1];
-    schedule(tick,time=>{
-      if(state.playing)synth.triggerAttackRelease(noteName(n.p),dur,time,velocity);
+    atTick(tick,time=>{
+      if(!state.playing)return;
+      try{
+        if(n.track==="bass"){
+          bass.triggerAttackRelease(noteName(n.p),dur,time,velocity);
+          return;
+        }
+        if(n.track==="drums"){
+          const p=Number(n.p);
+          if(p===36)kick.triggerAttackRelease("C1",dur,time,velocity);
+          else if(p===38||p===40)snare.triggerAttackRelease(dur,time,velocity);
+          else if(p===42||p===44||p===46)hat.triggerAttackRelease(dur,time,velocity);
+          else clap.triggerAttackRelease(dur,time,velocity);
+          return;
+        }
+        const idx={chords:0,melody:1,counter:2,arp:3}[n.track];
+        tracks[idx??1].triggerAttackRelease(noteName(n.p),dur,time,velocity);
+      }catch(err){console.warn("Melodix note skipped",err)}
     });
   }
 
-  state.tone.parts=parts;
-
-  const totalSeconds=Math.max(.1,bars*4*60/bpm);
-  transport.scheduleOnce(()=>{},totalSeconds);
+  state.tone.events=events;
 }
 
 async function playPreview(){
-  if(!state.notes.length){
-    $('#statusBadge').textContent='NOTHING TO PLAY';
-    return;
-  }
-  if(state.playing){
-    stopPreview();
-    return;
-  }
+  if(!state.notes.length){$('#statusBadge').textContent='NOTHING TO PLAY';return}
+  if(state.playing){stopPreview();return}
 
   try{
+    $('#statusBadge').textContent='STARTING AUDIO…';
+    await Tone.start();
     state.playing=true;
     $('#playPreview').textContent='■';
-    $('#statusBadge').textContent='STARTING AUDIO…';
 
     const bpm=Math.max(60,Math.min(200,+$('#bpm').value||140));
     const bars=Math.max(1,+$('#bars').value||32);
@@ -582,8 +556,8 @@ async function playPreview(){
     await prepareTonePlayer();
     scheduleTonePreview(bpm,bars);
 
-    const transport=Tone.getTransport();
-    transport.start("+0.05");
+    const transport=state.tone.transport;
+    transport.start("+0.05","0:0:0");
 
     $('#statusBadge').textContent='PLAYING';
     $('#playTime').textContent='00:00';
@@ -601,8 +575,7 @@ async function playPreview(){
   }catch(e){
     console.error("Melodix Tone player:",e);
     state.playing=false;
-    clearInterval(state.timer);
-    state.timer=null;
+    clearInterval(state.timer);state.timer=null;
     disposeTonePlayer();
     $('#playPreview').textContent='▶';
     $('#statusBadge').textContent='PLAYER ERROR';
@@ -613,8 +586,7 @@ async function playPreview(){
 
 function stopPreview(){
   state.playing=false;
-  clearInterval(state.timer);
-  state.timer=null;
+  clearInterval(state.timer);state.timer=null;
   disposeTonePlayer();
   $('#playPreview').textContent='▶';
   $('#transportFill').style.width='0%';
