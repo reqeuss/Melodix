@@ -10,7 +10,7 @@
     Hyperpop:{chords:"electric_grand_piano",melody:"lead_2_sawtooth",counter:"pad_8_sweep",arp:"celesta",bass:"synth_bass_2"},
     "R&B":{chords:"electric_piano_1",melody:"alto_sax",counter:"pad_2_warm",arp:"vibraphone",bass:"electric_bass_finger"},
     Pop:{chords:"acoustic_grand_piano",melody:"lead_6_voice",counter:"string_ensemble_1",arp:"glockenspiel",bass:"electric_bass_finger"},
-    Phonk:{chords:"electric_piano_2",melody:"lead_1_square",counter:"choir_aahs",arp:"cowbell",bass:"synth_bass_2"},
+    Phonk:{chords:"electric_piano_2",melody:"lead_1_square",counter:"choir_aahs",arp:"agogo",bass:"synth_bass_2"},
     "Hard Techno":{chords:"synth_strings_1",melody:"lead_2_sawtooth",counter:"pad_6_metallic",arp:"synth_drum",bass:"synth_bass_2"},
     "Lo-fi":{chords:"electric_piano_1",melody:"acoustic_grand_piano",counter:"pad_2_warm",arp:"kalimba",bass:"acoustic_bass"},
     Rock:{chords:"electric_guitar_clean",melody:"overdriven_guitar",counter:"string_ensemble_1",arp:"electric_guitar_clean",bass:"electric_bass_pick"},
