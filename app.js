@@ -494,62 +494,48 @@ async function prepareTonePlayer(){
 
   disposeTonePlayer();
 
-  const style=$('#style').value;
-  const profile=synthProfiles[style]||synthProfiles.Rap;
+  const raw=ctx.rawContext||ctx._context||ctx;
+  const masterGain=raw.createGain();
+  masterGain.gain.value=0.92;
+  masterGain.connect(raw.destination);
+
+  let sampled=false;
+  try{
+    if(window.MelodixInstruments){
+      await MelodixInstruments.load($('#style').value,masterGain);
+      sampled=true;
+    }
+  }catch(err){
+    console.warn("Melodix sampled instruments unavailable; synth fallback:",err);
+    MelodixInstruments?.dispose?.();
+  }
+
+  // Tone remains as a deterministic fallback for browsers that block sample loading.
   const master=new Tone.Gain(.82).toDestination();
   const comp=new Tone.Compressor({threshold:-20,ratio:3,attack:.01,release:.12}).connect(master);
   const tracks=[];
-
+  const profile=synthProfiles[$('#style').value]||synthProfiles.Rap;
   for(const id of ['chords','melody','counter','arp']){
     const spec=profile[id==="chords"?"chord":id];
     let synth;
-    try{
-      synth=makeToneSynth(spec[0],spec[1]);
-    }catch(err){
-      console.warn("Melodix synth fallback",id,spec[0],err);
+    try{synth=makeToneSynth(spec[0],spec[1])}catch{
       synth=new Tone.PolySynth(Tone.Synth);
       synth.set({oscillator:{type:"triangle"},envelope:{attack:.01,decay:.18,sustain:.35,release:.3}});
     }
     synth.connect(comp);
-    synth.volume.value=Math.max(-12,Math.min(-3,Number(synth.volume.value)||-8));
-    if(id==="counter"||id==="arp")synth.volume.value+=2;
+    synth.volume.value=-60;
     tracks.push(synth);
   }
-
   const bass=new Tone.MonoSynth({
     oscillator:{type:"sine"},
     filter:{type:"lowpass",frequency:240,Q:1},
     envelope:{attack:.004,decay:.14,sustain:.5,release:.16},
     filterEnvelope:{attack:.001,decay:.08,sustain:.2,release:.12,baseFrequency:45,octaves:3},
-    volume:-3
+    volume:-60
   }).connect(comp);
 
-  const kick=new Tone.MembraneSynth({
-    pitchDecay:.02,octaves:5,
-    envelope:{attack:.001,decay:.2,sustain:0,release:.05},
-    volume:-3
-  }).connect(comp);
-
-  const snare=new Tone.NoiseSynth({
-    noise:{type:"white"},
-    envelope:{attack:.001,decay:.08,sustain:0,release:.03},
-    volume:-9
-  }).connect(comp);
-
-  const hat=new Tone.MetalSynth({
-    frequency:180,
-    envelope:{attack:.001,decay:.025,release:.02},
-    harmonicity:5.1,modulationIndex:28,resonance:2500,
-    volume:-17
-  }).connect(comp);
-
-  const clap=new Tone.NoiseSynth({
-    noise:{type:"pink"},
-    envelope:{attack:.001,decay:.1,sustain:0,release:.03},
-    volume:-13
-  }).connect(comp);
-
-  state.tone={ready:true,tracks,drums:[kick,snare,hat,clap],bass,master,transport:null,events:[],scheduledUntil:0};
+  state.tone={ready:true,tracks,drums:[],bass,master,transport:null,events:[],scheduledUntil:0,
+    sampled,rawMaster:masterGain,sampledEngine:window.MelodixInstruments};
   return state.tone;
 }
 
@@ -578,9 +564,14 @@ function scheduleTonePreview(bpm,bars){
         else if(p===42||p===44||p===46)hat.triggerAttackRelease(dur,time,velocity);
         else clap.triggerAttackRelease(dur,time,velocity);
       }else{
-        const idx={chords:0,melody:1,counter:2,arp:3}[n.track];
-        const synth=tracks[idx??1];
-        synth.triggerAttackRelease(midiToFrequency(n.p),dur,time,velocity);
+        const sampledOk=state.tone.sampled && state.tone.sampledEngine?.play(
+          n.track,n.p,time,dur,Number(n.v)||80
+        );
+        if(!sampledOk){
+          const idx={chords:0,melody:1,counter:2,arp:3}[n.track];
+          const synth=tracks[idx??1];
+          synth.triggerAttackRelease(midiToFrequency(n.p),dur,time,velocity);
+        }
       }
     }catch(err){
       console.warn("Melodix note skipped",n.track,n.p,err);
@@ -646,6 +637,8 @@ function stopPreview(){
   state.playing=false;
   clearInterval(state.timer);
   state.timer=null;
+  try{state.tone.sampledEngine?.stop?.()}catch{}
+  try{state.tone.rawMaster?.disconnect?.()}catch{}
   disposeTonePlayer();
   $('#playPreview').textContent='▶';
   $('#transportFill').style.width='0%';
