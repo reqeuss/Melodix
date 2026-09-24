@@ -230,52 +230,75 @@ function hashSeedNumber(seed){
 function renderBrowserAISequence(sample,bars,bpm,energy,complexity){
   const o={drums:[],bass:[],chords:[],melody:[],counter:[],arp:[]};
   const sourceBars=Math.max(1,Math.round((sample.totalQuantizedSteps||64)/16));
-  const stepsPerBar=16;
-  const barTicks=1920;
+  const stepsPerBar=16,barTicks=1920;
   const scale=chooseScale($('#style').value,$('#mood').value);
-  const seedR=rng($('#seed').value+'|browser-ai');
-  const human=(seedR()-.5)*18;
-  const baseRoot=state.inspiration?.keyIndex ?? ({Rap:0,Drill:2,Trap:0,Hyperpop:9,'R&B':9,Pop:0,Phonk:9,'Hard Techno':5,'Lo-fi':0,Rock:4,Experimental:2}[$('#style').value]||0);
-  const pitchShift=baseRoot-(sample.notes.find(n=>!n.isDrum)?.pitch||60)%12;
-  const repeatCount=Math.ceil(bars/sourceBars);
+  const r=rng($('#seed').value+'|browser-arrangement');
+  const style=$('#style').value;
+  const baseRoot=state.inspiration?.keyIndex ?? ({Rap:0,Drill:2,Trap:0,Hyperpop:9,'R&B':9,Pop:0,Phonk:9,'Hard Techno':5,'Lo-fi':0,Rock:4,Experimental:2}[style]||0);
   const byTrack={melody:[],bass:[],drums:[]};
   for(const n of sample.notes||[]){
     const track=n.isDrum?'drums':(n.instrument===1?'bass':'melody');
     byTrack[track].push(n);
   }
+  const melodic=byTrack.melody.filter(n=>!n.isDrum);
+  const firstMelody=melodic[0]?.pitch??60;
+  const pitchShift=baseRoot-((firstMelody%12+12)%12);
+  const repeatCount=Math.ceil(bars/sourceBars);
   for(let repeat=0;repeat<repeatCount;repeat++){
     const repeatOffset=repeat*sourceBars*barTicks;
-    const x=Math.min(0.999,(repeat*sourceBars)/bars);const section=x<.10?'intro':x<.30?'verse':x<.38?'pre':x<.60?'hook':x<.76?'verse2':x<.88?'break':'outro';
+    const x=Math.min(.999,(repeat*sourceBars)/bars);
+    const section=x<.10?'intro':x<.30?'verse':x<.38?'pre':x<.60?'hook':x<.76?'verse2':x<.88?'break':'outro';
     for(const [track,notes] of Object.entries(byTrack)){
       for(const n of notes){
-        const qStart=Number.isFinite(n.quantizedStartStep)?n.quantizedStartStep:0;
-        const qEnd=Number.isFinite(n.quantizedEndStep)?n.quantizedEndStep:qStart+1;
-        const t=repeatOffset+qStart*(barTicks/stepsPerBar);
-        const d=Math.max(30,(qEnd-qStart)*(barTicks/stepsPerBar));
+        const qs=Number.isFinite(n.quantizedStartStep)?n.quantizedStartStep:0;
+        const qe=Number.isFinite(n.quantizedEndStep)?n.quantizedEndStep:qs+1;
+        const t=repeatOffset+qs*(barTicks/stepsPerBar);
+        const d=Math.max(30,(qe-qs)*(barTicks/stepsPerBar));
         if(t>=bars*barTicks)continue;
-        if(section==='break'&&track!=='melody'&&seedR()<.7)continue;
+        if(section==='break'&&track!=='melody'&&r()<.72)continue;
         let p=n.pitch;
         if(track!=='drums')p+=pitchShift;
         if(track==='bass')p-=12;
+        // Controlled octave/register variation prevents a copied loop from sounding flat.
+        if(track==='melody'&&section==='hook'&&r()<.16)p+=12;
+        if(track==='bass'&&section==='hook'&&r()<.10)p+=12;
         p=Math.max(0,Math.min(127,p));
-        const v=Math.max(1,Math.min(127,(n.velocity||80)+(energy-50)*.12+(seedR()-.5)*8+human*.08));
-        add(o[track],t+Math.round((seedR()-.5)*Math.min(18,d*.08)),p,d,v,track==='drums'?9:0);
+        const v=Math.max(1,Math.min(127,(n.velocity||80)+(energy-50)*.18+(r()-.5)*7));
+        add(o[track],t+Math.round((r()-.5)*Math.min(16,d*.06)),p,d,v,track==='drums'?9:0);
+      }
+    }
+
+    // Build actual chord beds from the generated musical material instead of random chords.
+    const barStart=repeatOffset;
+    const sourceMelody=melodic.filter(n=>{
+      const q=n.quantizedStartStep||0;
+      return q>=0&&q<sourceBars*stepsPerBar;
+    });
+    const anchor=sourceMelody.length?sourceMelody[Math.min(sourceMelody.length-1,repeat%Math.max(1,sourceMelody.length))].pitch+pitchShift:60;
+    const root=baseRoot+scale[(Math.floor(anchor/2)+repeat)%scale.length];
+    const quality=(style==='R&B'||style==='Pop')?(repeat%3===0?'maj7':'min7'):(repeat%4===2?'sus2':'minor');
+    const intervals={minor:[0,3,7],maj7:[0,4,7,11],min7:[0,3,7,10],sus2:[0,2,7]}[quality]||[0,3,7];
+    const voicing=intervals.map((x,i)=>root+x+(i===1&&repeat%2?12:0));
+    for(const p of voicing)add(o.chords,barStart,p,Math.min(sourceBars*barTicks-80,1840),32+energy*.25);
+    // Reinforce bass with root movement while keeping the AI bass line.
+    if(!byTrack.bass.length||r()<.7){
+      for(let b=0;b<sourceBars;b++){
+        const bt=barStart+b*barTicks;
+        add(o.bass,bt,root-12,Math.min(420,barTicks*.32),82+energy*.12);
+        if(r()<.62)add(o.bass,bt+960,root-12+(r()<.35?12:0),300,68+energy*.12);
       }
     }
     if($('#counter').checked&&(section==='hook'||section==='pre')){
-      const source=byTrack.melody.filter(n=>!n.isDrum).slice(0,8);
+      const source=sourceMelody.slice(0,8);
       for(const n of source){
-        const t=repeatOffset+(n.quantizedStartStep||0)*(barTicks/stepsPerBar)+80;
+        const t=barStart+(n.quantizedStartStep||0)*(barTicks/stepsPerBar)+70;
         if(t>=bars*barTicks)continue;
-        add(o.counter,t,Math.max(0,Math.min(127,n.pitch+pitchShift-7)),Math.max(60,((n.quantizedEndStep||1)-(n.quantizedStartStep||0))*(barTicks/stepsPerBar)*.55),42+energy*.22);
+        add(o.counter,t,Math.max(0,Math.min(127,n.pitch+pitchShift-7)),Math.max(60,(n.quantizedEndStep-n.quantizedStartStep)*(barTicks/stepsPerBar)*.5),38+energy*.2);
       }
     }
     if($('#arp').checked&&(section==='hook'||section==='verse2')){
-      const source=byTrack.melody.filter(n=>!n.isDrum).slice(0,4);
-      source.forEach((n,i)=>{
-        const t=repeatOffset+i*480;
-        add(o.arp,t,Math.max(0,Math.min(127,n.pitch+pitchShift+12)),180,30+complexity*.35);
-      });
+      const chordTop=Math.max(...voicing);
+      for(let i=0;i<8;i++)add(o.arp,barStart+i*240,chordTop+12+(i%2?0:7),120,28+complexity*.35);
     }
   }
   if(!$('#intro').checked)for(const k of ['drums','melody','counter','arp'])o[k]=o[k].filter(n=>n.t>=barTicks);
@@ -293,17 +316,38 @@ async function composeWithBrowserAI(){
   const bars=+$('#bars').value,bpm=Math.max(60,Math.min(200,+$('#bpm').value||140));
   const energy=+$('#energy').value,complexity=+$('#complexity').value;
   const seed=$('#seed').value;
+  const style=$('#style').value;
   if(window.tf?.random?.setSeed)tf.random.setSeed(hashSeedNumber(seed));
-  const blocks=Math.ceil(bars/4);
-  const samples=await model.sample(blocks,Math.max(.45,Math.min(1.25,.65+complexity/250)));
+  const blocks=Math.max(1,Math.ceil(bars/4));
+  const temperature=Math.max(.45,Math.min(1.15,.52+complexity/180));
+  // Several candidates per section: instead of stitching unrelated random loops,
+  // choose each block by continuity, density and style-aware scoring.
+  const samples=await model.sample(blocks*3,temperature);
+  const pool=makeAICandidatePool(samples,blocks);
+  const chosen=[];
+  let previous=null;
+  for(let b=0;b<blocks;b++){
+    const candidates=pool[b]||[];
+    let best=candidates[0],bestScore=-Infinity;
+    for(const candidate of candidates){
+      const sc=scoreMusicCandidate(candidate,previous,style,complexity)+(hashSeedNumber(seed+'|'+b)%17)/100;
+      if(sc>bestScore){bestScore=sc;best=candidate}
+    }
+    chosen.push(best||{notes:[],totalQuantizedSteps:64});
+    previous=sequenceStats(best||{notes:[]});
+  }
   const merged={notes:[],totalQuantizedSteps:blocks*64};
-  for(let i=0;i<samples.length;i++){
-    const sample=samples[i];
-    for(const n of sample.notes||[]){
-      merged.notes.push({...n,quantizedStartStep:(n.quantizedStartStep||0)+i*64,quantizedEndStep:(n.quantizedEndStep||0)+i*64});
+  for(let i=0;i<chosen.length;i++){
+    for(const n of chosen[i].notes||[]){
+      const offset=i*64;
+      merged.notes.push({
+        ...n,
+        quantizedStartStep:(n.quantizedStartStep||0)+offset,
+        quantizedEndStep:(n.quantizedEndStep||0)+offset
+      });
     }
   }
-  $('#statusBadge').textContent='IA WEB · MUSIQUE';
+  $('#statusBadge').textContent='IA WEB · CHOIX MUSICAL';
   return renderBrowserAISequence(merged,bars,bpm,energy,complexity);
 }
 
@@ -315,7 +359,20 @@ function zipStore(files){const enc=new TextEncoder(),local=[],central=[];let off
 function downloadZip(){const files=Object.entries(state.generated).filter(([id])=>id!=='full').map(([id,d])=>({name:'midi/melodix-'+id+'.mid',data:d.midi}));files.push({name:'melodix-instrumentale-full.mid',data:state.generated.full.midi});downloadBlob('melodix-midi-pack.zip',zipStore(files),'application/zip')}
 async function loadReference(f){if(!f||!f.type.startsWith('audio/'))return;if(state.reference?.url)URL.revokeObjectURL(state.reference.url);const url=URL.createObjectURL(f);state.reference={url};$('#player').src=url;$('#player').hidden=false;$('#fileName').textContent=f.name;$('#format').textContent=(f.name.split('.').pop()||'AUDIO').toUpperCase();$('#refState').textContent='READY';$('#player').onloadedmetadata=()=>$('#duration').textContent=Number.isFinite($('#player').duration)?fmt($('#player').duration):'—';await inspectReference(f)}
 function fmt(s){return Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0')}
-const soundfontMap={chords:'acoustic_grand_piano',melody:'electric_piano_1',counter:'acoustic_guitar_steel',arp:'acoustic_guitar_nylon',bass:'synth_bass_2'};
+const soundfontProfiles={
+  Rap:{chords:'electric_piano_1',melody:'acoustic_grand_piano',counter:'acoustic_guitar_steel',arp:'lead_1_square'},
+  Drill:{chords:'acoustic_grand_piano',melody:'electric_piano_1',counter:'acoustic_guitar_nylon',arp:'pad_2_warm'},
+  Trap:{chords:'electric_piano_1',melody:'acoustic_grand_piano',counter:'electric_guitar_clean',arp:'lead_2_sawtooth'},
+  Hyperpop:{chords:'electric_piano_1',melody:'lead_2_sawtooth',counter:'electric_guitar_clean',arp:'lead_1_square'},
+  'R&B':{chords:'electric_piano_1',melody:'acoustic_grand_piano',counter:'acoustic_guitar_nylon',arp:'pad_2_warm'},
+  Pop:{chords:'acoustic_grand_piano',melody:'electric_piano_1',counter:'acoustic_guitar_steel',arp:'string_ensemble_1'},
+  Phonk:{chords:'electric_piano_1',melody:'acoustic_grand_piano',counter:'electric_guitar_muted',arp:'lead_8_bass__lead'},
+  'Hard Techno':{chords:'synth_strings_1',melody:'lead_2_sawtooth',counter:'lead_1_square',arp:'lead_8_bass__lead'},
+  'Lo-fi':{chords:'electric_piano_1',melody:'acoustic_grand_piano',counter:'acoustic_guitar_nylon',arp:'music_box'},
+  Rock:{chords:'distortion_guitar',melody:'electric_guitar_clean',counter:'acoustic_guitar_steel',arp:'overdriven_guitar'},
+  Experimental:{chords:'electric_piano_1',melody:'lead_8_bass__lead',counter:'electric_guitar_clean',arp:'fx_1_rain'}
+};
+function getSoundfontMap(){return soundfontProfiles[$('#style').value]||soundfontProfiles.Rap}
 async function getSoundfontInstrument(name){
   if(!state.audioCtx)throw new Error('AudioContext unavailable');
   if(state.players[name])return state.players[name];
@@ -323,49 +380,49 @@ async function getSoundfontInstrument(name){
   state.players[name]=p;return p;
 }
 async function playSampledTrack(track,bpm){
-  const name=soundfontMap[track];if(!name)return;
+  const map=getSoundfontMap(),name=map[track];if(!name)return;
   const p=await getSoundfontInstrument(name);
   const now=state.audioCtx.currentTime+.12,secTick=60/bpm/480;
   for(const n of state.notes.filter(x=>x.track===track)){
-    const when=now+n.t*secTick,dur=Math.max(.06,n.d*secTick);
-    try{p.play(n.p,when,{duration:dur,gain:Math.min(1,(n.v||80)/100)})}catch(e){console.warn(track,e)}
+    const when=now+n.t*secTick,dur=Math.max(.045,n.d*secTick);
+    try{p.play(n.p,when,{duration:dur,gain:Math.min(.9,(n.v||80)/112)})}catch(e){console.warn(track,e)}
+  }
+}
+async function playDrumSoundfont(bpm){
+  const p=await getSoundfontInstrument('percussion');
+  const now=state.audioCtx.currentTime+.12,secTick=60/bpm/480;
+  for(const n of state.notes.filter(x=>x.track==='drums')){
+    try{p.play(n.p,now+n.t*secTick,{duration:Math.max(.04,n.d*secTick),gain:Math.min(.9,(n.v||80)/115)})}catch(e){console.warn('drums',e)}
   }
 }
 function play808Preview(bpm){
   const c=state.audioCtx;if(!c)return;
   const now=c.currentTime+.12,secTick=60/bpm/480;
   for(const n of state.notes.filter(x=>x.track==='bass')){
-    const when=now+n.t*secTick,dur=Math.max(.08,n.d*secTick),o=c.createOscillator(),g=c.createGain(),f=c.createBiquadFilter();
-    o.type='sine';o.frequency.setValueAtTime(Math.min(100,440*Math.pow(2,(n.p-69)/12)),when);
-    o.frequency.exponentialRampToValueAtTime(Math.max(30,440*Math.pow(2,(n.p-69)/12)),when+Math.min(.08,dur*.2));
-    f.type='lowpass';f.frequency.setValueAtTime(180,when);g.gain.setValueAtTime(.0001,when);
-    g.gain.exponentialRampToValueAtTime(.62,when+.006);g.gain.exponentialRampToValueAtTime(.18,when+Math.min(.18,dur*.4));g.gain.exponentialRampToValueAtTime(.0001,when+dur);
+    const when=now+n.t*secTick,dur=Math.max(.08,n.d*secTick);
+    const o=c.createOscillator(),g=c.createGain(),f=c.createBiquadFilter();
+    const freq=Math.max(28,Math.min(120,440*Math.pow(2,(n.p-69)/12)));
+    o.type='sine';o.frequency.setValueAtTime(Math.min(95,freq*1.7),when);
+    o.frequency.exponentialRampToValueAtTime(freq,when+Math.min(.085,dur*.3));
+    f.type='lowpass';f.frequency.setValueAtTime(210,when);f.Q.value=.7;
+    g.gain.setValueAtTime(.0001,when);
+    g.gain.exponentialRampToValueAtTime(.66,when+.006);
+    g.gain.exponentialRampToValueAtTime(.2,when+Math.min(.16,dur*.4));
+    g.gain.exponentialRampToValueAtTime(.0001,when+dur);
     o.connect(f).connect(g).connect(c.destination);o.start(when);o.stop(when+dur+.03);
-  }
-}
-function playDrumsPreview(bpm){
-  const c=state.audioCtx;if(!c)return;
-  for(const n of state.notes.filter(x=>x.track==='drums')){
-    const when=c.currentTime+.12+n.t/480*60/bpm,g=c.createGain(),o=c.createOscillator();
-    o.type=n.p===42?'square':'sine';o.frequency.setValueAtTime(n.p===36?82:n.p===38?190:720,when);
-    if(n.p===36)o.frequency.exponentialRampToValueAtTime(42,when+.07);
-    g.gain.setValueAtTime(.0001,when);g.gain.exponentialRampToValueAtTime(Math.min(.22,n.v/650),when+.004);
-    g.gain.exponentialRampToValueAtTime(.0001,when+(n.p===36?.12:.07));o.connect(g).connect(c.destination);o.start(when);o.stop(when+(n.p===36?.14:.09));
   }
 }
 async function playNativePreview(bpm){
   const c=state.audioCtx;if(!c||c.state!=='running')throw new Error('AudioContext unavailable');
   await Promise.all(['chords','melody','counter','arp'].map(t=>playSampledTrack(t,bpm)));
-  play808Preview(bpm);playDrumsPreview(bpm);
+  await playDrumSoundfont(bpm);
+  play808Preview(bpm);
 }
-async function playPreview(){if(!state.notes.length)return;clearInterval(state.timer);state.timer=null;state.playing=true;$('#playPreview').textContent='Ⅱ';const bpm=+$('#bpm').value||140;try{const Ctx=window.AudioContext||window.webkitAudioContext;if(!Ctx)throw new Error('WebAudio unavailable');if(!state.audioCtx||state.audioCtx.state==='closed')state.audioCtx=new Ctx();if(state.audioCtx.state!=='running')await state.audioCtx.resume();if(state.audioCtx.state!=='running')throw new Error('AudioContext not running');playNativePreview(bpm);const start=performance.now(),secTick=60/bpm/480,total=+$('#bars').value*1920;state.timer=setInterval(()=>{const elapsed=(performance.now()-start)/1000,p=Math.min(1,elapsed/(total*secTick));$('#transportFill').style.width=p*100+'%';$('#playTime').textContent=String(Math.floor(elapsed/60)).padStart(2,'0')+':'+String(Math.floor(elapsed%60)).padStart(2,'0');if(p>=1)stopPreview()},50)}catch(e){console.error('Melodix preview:',e);state.playing=false;$('#playPreview').textContent='▶';clearInterval(state.timer);state.timer=null;alert('Le moteur audio du navigateur n’a pas pu démarrer. Les MIDI restent disponibles.')}}
-function play808Preview(bpm){const c=state.audioCtx;if(!c)return;const notes=state.notes.filter(x=>x.track==='bass'),now=c.currentTime+.12;for(const n of notes){const when=now+n.t/480*60/bpm,dur=Math.max(.08,n.d/480*60/bpm),o=c.createOscillator(),g=c.createGain();o.type='sine';o.frequency.setValueAtTime(Math.min(90,440*Math.pow(2,(n.p-69)/12)*2.2),when);o.frequency.exponentialRampToValueAtTime(Math.max(28,440*Math.pow(2,(n.p-69)/12)),when+Math.min(.09,dur*.35));g.gain.setValueAtTime(.0001,when);g.gain.exponentialRampToValueAtTime(.62,when+.006);g.gain.exponentialRampToValueAtTime(.16,when+Math.min(.12,dur*.35));g.gain.exponentialRampToValueAtTime(.0001,when+dur);o.connect(g).connect(c.destination);o.start(when);o.stop(when+dur+.02)}}
-function playDrumsPreview(bpm){const c=state.audioCtx;if(!c)return;for(const n of state.notes.filter(x=>x.track==='drums')){const when=c.currentTime+.12+n.t/480*60/bpm,g=c.createGain(),o=c.createOscillator();o.type=n.p===42?'square':'sine';o.frequency.setValueAtTime(n.p===36?82:n.p===38?190:720,when);if(n.p===36)o.frequency.exponentialRampToValueAtTime(42,when+.07);g.gain.setValueAtTime(.0001,when);g.gain.exponentialRampToValueAtTime(Math.min(.22,n.v/650),when+.004);g.gain.exponentialRampToValueAtTime(.0001,when+(n.p===36?.12:.07));o.connect(g).connect(c.destination);o.start(when);o.stop(when+(n.p===36?.14:.09))}}
 function stopPreview(){state.playing=false;clearInterval(state.timer);state.timer=null;Object.values(state.players).forEach(p=>{try{p.stop()}catch{}});state.players={};if(state.drumCtx){try{state.drumCtx.close()}catch{}state.drumCtx=null}if(state.audioCtx&&state.audioCtx.state==='running'){try{state.audioCtx.suspend()}catch{}}$('#playPreview').textContent='▶';$('#transportFill').style.width='0%';$('#playTime').textContent='00:00'}
 async function generate(){
   const btn=$('#generate');btn.disabled=true;stopPreview();
   $('#statusBadge').textContent='IA WEB…';$('#emptyOutput').hidden=false;$('#result').hidden=true;
-  $('#emptyOutput').innerHTML='<div>🧠</div><b>Création par IA musicale dans le navigateur…</b><span>Le modèle comprend harmonie, mélodie, basse et batterie.</span>';
+  $('#emptyOutput').innerHTML='<div>🧠</div><b>Composition musicale en cours…</b><span>IA + arrangement multi-couches + variations + instruments.</span>';
   try{
     if(creationMode==='reference'){try{const ns=await transcribeReference();state.generated=composeFromTranscription(ns)}catch(e){console.warn('Transcription IA:',e);state.generated=compose()}}else state.generated=await composeWithBrowserAI();
   }catch(e){
