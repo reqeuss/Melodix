@@ -454,13 +454,19 @@ function disposeTonePlayer(){
   state.tone={ready:false,tracks:[],drums:[],bass:null,master:null,transport:null,events:[],scheduledUntil:0};
 }
 
+function midiToFrequency(midi){
+  const n=Math.max(0,Math.min(127,Number(midi)||60));
+  return 440*Math.pow(2,(n-69)/12);
+}
+
 function makeToneSynth(type,opts){
   const C=Tone[type];
   if(!C)throw new Error("Tone instrument unavailable: "+type);
   if(type==="PolySynth"){
-    const synth=new C(Tone.Synth);
+    const Voice=Tone[opts?.voice]||Tone.Synth;
+    const synth=new C(Voice);
     const voiceOptions={...(opts?.options||{})};
-    if(Object.keys(voiceOptions).length)try{synth.set(voiceOptions)}catch{}
+    if(Object.keys(voiceOptions).length)try{synth.set(voiceOptions)}catch(err){console.warn("Melodix synth options skipped",err)}
     synth.maxPolyphony=16;
     return synth;
   }
@@ -544,7 +550,7 @@ function scheduleTonePreview(bpm,bars){
 
     try{
       if(n.track==="bass"){
-        bass.triggerAttackRelease(noteName(n.p),dur,time,velocity);
+        bass.triggerAttackRelease(midiToFrequency(n.p),dur,time,velocity);
       }else if(n.track==="drums"){
         const p=Number(n.p);
         if(p===36)kick.triggerAttackRelease("C1",dur,time,velocity);
@@ -554,7 +560,7 @@ function scheduleTonePreview(bpm,bars){
       }else{
         const idx={chords:0,melody:1,counter:2,arp:3}[n.track];
         const synth=tracks[idx??1];
-        synth.triggerAttackRelease(noteName(n.p),dur,time,velocity);
+        synth.triggerAttackRelease(midiToFrequency(n.p),dur,time,velocity);
       }
     }catch(err){
       console.warn("Melodix note skipped",n.track,n.p,err);
