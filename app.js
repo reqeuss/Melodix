@@ -507,7 +507,7 @@ async function prepareTonePlayer(){
     }
   }catch(err){
     console.warn("Melodix sampled instruments unavailable; synth fallback:",err);
-    MelodixInstruments?.dispose?.();
+    window.MelodixInstruments?.dispose?.();
   }
 
   // Tone remains as a deterministic fallback for browsers that block sample loading.
