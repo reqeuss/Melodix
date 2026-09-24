@@ -220,8 +220,7 @@ function setCreationMode(mode){
   $('#modeImagine')?.classList.toggle('active',!ref);
   $('#controlEyebrow')?.replaceChildren(document.createTextNode(ref?'AUDIO → MIDI':'AI COMPOSITION'));
   $('#controlTitle')?.replaceChildren(document.createTextNode(ref?'Analyse & reconstruction':'Imagine'));
-  const referencePanel=$('#referencePanel');
-  if(referencePanel) referencePanel.style.opacity=ref?'1':'.62';
+  $('#referencePanel')?.style && ($('#referencePanel').style.opacity=ref?'1':'.62');
   if($('#pipeline'))$('#pipeline').innerHTML=ref?'<span class="active">Audio</span><i>→</i><span>IA Analyse</span><i>→</i><span>MIDI</span><i>→</i><span>Instru</span>':'<span class="active">Seed</span><i>→</i><span>IA Imagine</span><i>→</i><span>Arrangement</span><i>→</i><span>Instru</span>';
   if($('#generate'))$('#generate').innerHTML=ref?'<span>✦</span> ANALYSER & CRÉER <kbd>ENTER</kbd>':'<span>✦</span> IMAGINER L\'INSTRUMENTALE <kbd>ENTER</kbd>';
   if($('#analysisText'))$('#analysisText').textContent=ref?(state.reference?'Référence prête · analyse musicale disponible':'En attente d\'une référence'):'Aucune référence nécessaire · moteur autonome';
@@ -611,18 +610,64 @@ async function playPreview(){
     $('#playPreview').textContent='■';
 
     const bpm=Math.max(60,Math.min(200,+$('#bpm').value||140));
+    const bars=Math.max(1,+$('#bars').value||32);
+    const duration=bars*4*60/bpm;
 
-/* ===== MELodix APP CONTROLLER ===== */
-function setStatus(text){const el=$('#statusBadge');if(el)el.textContent=text}
-function setBusy(busy){const b=$('#generate');if(!b)return;b.disabled=busy;b.classList.toggle('is-loading',busy);b.setAttribute('aria-busy',String(busy))}
-function showResult(){const e=$('#emptyOutput'),r=$('#result');if(e)e.hidden=true;if(r)r.hidden=false}
-function syncOutputs(){const e=$('#energy'),eo=$('#energyOut'),c=$('#complexity'),co=$('#complexityOut');if(eo&&e)eo.textContent=e.value+'%';if(co&&c)co.textContent=c.value+'%'}
-function syncSessionMeta(){const bars=$('#bars')?.value||32,bpm=$('#bpm')?.value||140;if($('#previewMeta'))$('#previewMeta').textContent=bars+' mesures · '+bpm+' BPM';if($('#playerDuration'))$('#playerDuration').textContent=fmt((bars*4*60)/bpm)}
-function renderAll(){renderAdvice();renderTracks();renderPreview();renderTrackDownloads();syncOutputs();syncSessionMeta()}
-function stopPreview(){state.playing=false;try{for(const x of state.tone?.tracks||[])x.releaseAll?.();for(const x of state.tone?.drums||[])x.releaseAll?.();state.tone?.bass?.triggerRelease?.()}catch{}if(state.timer){clearInterval(state.timer);state.timer=null}if($('#playPreview'))$('#playPreview').textContent='▶';if($('#transportFill'))$('#transportFill').style.width='0%';if($('#playTime'))$('#playTime').textContent='00:00';if(state.notes.length)setStatus('READY')}
-async function playPreview(){if(!state.notes.length){setStatus('GENERATE FIRST');return}if(state.playing){stopPreview();return}try{setStatus('STARTING AUDIO…');await prepareTonePlayer();const bpm=Math.max(60,Math.min(200,+$('#bpm').value||140));const bars=+$('#bars').value||32;const duration=scheduleTonePreview(bpm,bars);state.playing=true;if($('#playPreview'))$('#playPreview').textContent='■';const started=performance.now();if(state.timer)clearInterval(state.timer);state.timer=setInterval(()=>{const elapsed=Math.min(duration,(performance.now()-started)/1000);const pct=duration?elapsed/duration:1;if($('#playTime'))$('#playTime').textContent=fmt(elapsed);if($('#transportFill'))$('#transportFill').style.width=(pct*100)+'%';if(elapsed>=duration)stopPreview()},50);setStatus('PLAYING')}catch(err){console.error('Melodix playback failed:',err);state.playing=false;if($('#playPreview'))$('#playPreview').textContent='▶';setStatus('AUDIO ERROR')}}
-async function generateSession(){if(state.playing)stopPreview();setBusy(true);setStatus('COMPOSITION…');try{let generated=null;if(creationMode==='reference'&&state.reference){setStatus('ANALYSE AUDIO…');try{generated=composeFromTranscription(await transcribeReference())}catch(err){console.warn('Transcription fallback:',err);generated=compose()}}else{try{generated=await composeWithBrowserAI()}catch(err){console.warn('Browser AI fallback:',err);generated=compose()}}state.generated=generated||compose();showResult();renderAll();if($('#all'))$('#all').disabled=!state.generated.full;if($('#zip'))$('#zip').disabled=!state.generated.full;setStatus('READY · '+Object.keys(state.generated).filter(x=>x!=='full').length+' PISTES');if($('#transportTitle'))$('#transportTitle').textContent=($('#style')?.value||'Rap')+' · '+($('#mood')?.value||'Instrumental')}catch(err){console.error('Generation failed:',err);setStatus('ERREUR');const e=$('#emptyOutput');if(e){e.hidden=false;e.innerHTML='<div class="empty-logo">!</div><b>La génération a échoué</b><span>'+String(err?.message||err).replace(/[<>]/g,'')+'</span>'}}finally{setBusy(false)}}
-function setCreationMode(mode){creationMode=mode==='reference'?'reference':'imagine';const ref=creationMode==='reference';$('#modeReference')?.classList.toggle('active',ref);$('#modeImagine')?.classList.toggle('active',!ref);const p=$('#pipeline');if(p)p.innerHTML=ref?'<span class="active">Audio</span><i>→</i><span>IA Analyse</span><i>→</i><span>MIDI</span><i>→</i><span>Instru</span>':'<span class="active">Seed</span><i>→</i><span>IA Imagine</span><i>→</i><span>Arrangement</span><i>→</i><span>Instru</span>';const source=$('.source-panel');if(source)source.style.opacity=ref?'1':'.62';const t=$('#analysisText');if(t)t.textContent=ref?(state.reference?'Référence prête · analyse musicale disponible':'En attente d\'une référence'):'Aucune référence nécessaire · moteur autonome';const b=$('#analysisBadge');if(b)b.textContent=ref?(state.reference?'READY':'WAIT'):'AUTO';const g=$('#generate');if(g)g.innerHTML=ref?'<span>✦</span> ANALYSER & CRÉER <kbd>ENTER</kbd>':'<span>✦</span> IMAGINER L\'INSTRUMENTALE <kbd>ENTER</kbd>'}
-function bindUI(){const mr=$('#modeReference'),mi=$('#modeImagine');mr?.addEventListener('click',()=>setCreationMode('reference'));mi?.addEventListener('click',()=>setCreationMode('imagine'));const file=$('#file'),drop=$('#drop');file?.addEventListener('change',e=>loadReference(e.target.files?.[0]));if(drop){['dragenter','dragover'].forEach(x=>drop.addEventListener(x,e=>{e.preventDefault();drop.classList.add('dragging')}));['dragleave','drop'].forEach(x=>drop.addEventListener(x,e=>{e.preventDefault();drop.classList.remove('dragging')}));drop.addEventListener('drop',e=>{const f=e.dataTransfer?.files?.[0];if(f)loadReference(f)})}$('#clearRef')?.addEventListener('click',()=>{if(state.reference?.url)URL.revokeObjectURL(state.reference.url);state.reference=null;state.inspiration=null;if(file)file.value='';const p=$('#player');if(p){p.pause();p.removeAttribute('src');p.hidden=true;try{p.load()}catch{}}if($('#fileName'))$('#fileName').textContent='Dépose ton audio';if($('#duration'))$('#duration').textContent='—';if($('#format'))$('#format').textContent='—';if($('#refState'))$('#refState').textContent='AUTO';setCreationMode(creationMode)});$('#generate')?.addEventListener('click',generateSession);$('#regen')?.addEventListener('click',generateSession);$('#playPreview')?.addEventListener('click',playPreview);$('#all')?.addEventListener('click',()=>downloadTrack('full'));$('#zip')?.addEventListener('click',downloadZip);$('#randomSeed')?.addEventListener('click',()=>{$('#seed').value=randomSeed()});document.querySelectorAll('.quick').forEach(b=>b.addEventListener('click',()=>{const s=b.dataset.style,sel=$('#style');if(sel&&[...sel.options].some(o=>o.value===s)){sel.value=s;sel.dispatchEvent(new Event('change',{bubbles:true))}}));$('#style')?.addEventListener('change',()=>{renderAdvice();renderTracks()});for(const id of ['energy','complexity','bpm','bars']){$('#'+id)?.addEventListener('input',()=>{syncOutputs();syncSessionMeta();if(id==='bars'||id==='bpm')renderPreview()});$('#'+id)?.addEventListener('change',()=>{syncOutputs();syncSessionMeta();if(id==='bars'||id==='bpm')renderPreview()})}document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target?.tagName!=='INPUT'&&e.target?.tagName!=='SELECT'&&e.target?.tagName!=='TEXTAREA'){e.preventDefault();generateSession()}})}
-function bootMelodix(){try{bindUI();renderAdvice();renderTracks();syncOutputs();syncSessionMeta();setCreationMode('reference');setStatus('READY')}catch(err){console.error('Melodix boot failed:',err);setStatus('BOOT ERROR')}}
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bootMelodix,{once:true});else bootMelodix();
+    await prepareTonePlayer();
+    scheduleTonePreview(bpm,bars);
+
+    $('#statusBadge').textContent='PLAYING';
+    $('#playTime').textContent='00:00';
+    $('#transportFill').style.width='0%';
+
+    const started=performance.now();
+    clearInterval(state.timer);
+    state.timer=setInterval(()=>{
+      if(!state.playing)return;
+      const elapsed=Math.min(duration,(performance.now()-started)/1000);
+      $('#transportFill').style.width=Math.min(100,elapsed/duration*100)+'%';
+      $('#playTime').textContent=fmt(elapsed);
+      if(elapsed>=duration)stopPreview();
+    },50);
+  }catch(e){
+    console.error("Melodix Tone player:",e);
+    state.playing=false;
+    clearInterval(state.timer);
+    state.timer=null;
+    disposeTonePlayer();
+    $('#playPreview').textContent='▶';
+    $('#statusBadge').textContent='PLAYER ERROR';
+    $('#playTime').textContent='00:00';
+    $('#transportFill').style.width='0%';
+  }
+}
+
+function stopPreview(){
+  state.playing=false;
+  clearInterval(state.timer);
+  state.timer=null;
+  disposeTonePlayer();
+  $('#playPreview').textContent='▶';
+  $('#transportFill').style.width='0%';
+  $('#playTime').textContent='00:00';
+}
+
+async function generate(){
+  const btn=$('#generate');btn.disabled=true;stopPreview();
+  $('#statusBadge').textContent='IA WEB…';$('#emptyOutput').hidden=false;$('#result').hidden=true;
+  $('#emptyOutput').innerHTML='<div>🧠</div><b>Composition musicale en cours…</b><span>IA + arrangement multi-couches + variations + instruments.</span>';
+  try{
+    if(creationMode==='reference'){try{const ns=await transcribeReference();state.generated=composeFromTranscription(ns)}catch(e){console.warn('Transcription IA:',e);state.generated=compose()}}else state.generated=await composeWithBrowserAI();
+  }catch(e){
+    console.warn('Melodix Browser AI unavailable:',e);
+    $('#statusBadge').textContent='MODE CRÉATIF';
+    $('#emptyOutput').innerHTML='<div>✦</div><b>IA Web indisponible · moteur de secours</b><span>La génération MIDI reste disponible.</span>';
+    state.generated=compose();
+  }
+  renderPreview();renderTracks();renderTrackDownloads();$('#result').hidden=false;$('#emptyOutput').hidden=true;
+  $('#all').disabled=false;$('#zip').disabled=false;btn.disabled=false;$('#statusBadge').textContent='GENERATED';$('#statusBadge').classList.add('done');
+  $('#transportTitle').textContent=$('#style').value+' · '+$('#mood').value+' · IA Web';
+}
+if($('#modeReference'))$('#modeReference').onclick=()=>setCreationMode('reference');if($('#modeImagine'))$('#modeImagine').onclick=()=>setCreationMode('imagine');setCreationMode('reference');
+const seedButton=$('#randomSeed');if(seedButton)seedButton.onclick=()=>{$('#seed').value=randomSeed();$('#seed').focus()};if($('#seed').value==='melodix-01')$('#seed').value=randomSeed();
+const file=$('#file'),drop=$('#drop');file.onchange=e=>loadReference(e.target.files[0]);['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('drag')}));['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('drag')}));drop.addEventListener('drop',e=>loadReference(e.dataTransfer.files[0]));$('#clearRef').onclick=()=>{if(state.reference?.url)URL.revokeObjectURL(state.reference.url);state.reference=null;state.inspiration=null;file.value='';$('#player').removeAttribute('src');$('#player').load();$('#player').hidden=true;$('#fileName').textContent='Aucune référence';$('#duration').textContent='—';$('#format').textContent='—';$('#refState').textContent='AUTO';$('#analysisText').textContent='Aucune référence · moteur créatif autonome';$('#analysisBadge').textContent='AUTO'};$('#energy').oninput=e=>$('#energyOut').textContent=e.target.value+'%';$('#complexity').oninput=e=>$('#complexityOut').textContent=e.target.value+'%';$('#style').onchange=()=>{renderAdvice();renderTracks()};$('#generate').onclick=generate;$('#regen').onclick=generate;$('#playPreview').onclick=()=>state.playing?stopPreview():playPreview();$('#all').onclick=()=>downloadTrack('full');$('#zip').onclick=downloadZip;document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.activeElement.tagName!=='INPUT'&&document.activeElement.tagName!=='SELECT')generate()});renderAdvice();renderTracks();
