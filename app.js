@@ -18,6 +18,12 @@ const trackIds=['drums','bass','chords','melody','counter','arp'];
 const trackNames={drums:'Drums',bass:'Bass',chords:'Chords',melody:'Melody','counter':'Counter melody',arp:'Arp / Texture'};
 const gm={drums:0,bass:38,chords:4,melody:81,counter:89,arp:88};
 
+function noteName(midi){
+  const n=Math.max(0,Math.min(127,Math.round(Number(midi)||60)));
+  const names=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+  return names[n%12]+(Math.floor(n/12)-1);
+}
+
 function renderAdvice(){const a=palette[$('#style').value]||palette.Rap;$('#instrumentAdvice').innerHTML=a.map(x=>'<div class="advice"><b>'+x[0]+'</b><span>'+x[1]+' · '+x[2]+'</span></div>').join('')}
 function renderTracks(){const a=palette[$('#style').value]||palette.Rap;$('#tracks').innerHTML=trackIds.map((id,i)=>{const p=a[i]||['Arp / Texture','Synth Pluck','Motion'];return '<div class="track"><i class="dot"></i><div class="track-info"><b>'+trackNames[id]+'</b><small>'+p[1]+' · '+p[2]+'</small></div><small>MIDI</small><button type="button" data-track="'+id+'">↓</button></div>'}).join('');document.querySelectorAll('[data-track]').forEach(b=>b.onclick=()=>downloadTrack(b.dataset.track))}
 function renderTrackDownloads(){const ids=Object.keys(state.generated).filter(x=>x!=='full');$('#trackDownloads').innerHTML=ids.map(id=>'<button class="track-download" data-track="'+id+'" type="button">'+trackNames[id]+'</button>').join('');document.querySelectorAll('.track-download').forEach(b=>b.onclick=()=>downloadTrack(b.dataset.track))}
@@ -452,8 +458,11 @@ function makeToneSynth(type,opts){
   const C=Tone[type];
   if(!C)throw new Error("Tone instrument unavailable: "+type);
   if(type==="PolySynth"){
+    const synth=new C(Tone.Synth);
     const voiceOptions={...(opts?.options||{})};
-    return new C(Tone.Synth,{...voiceOptions,maxPolyphony:16});
+    if(Object.keys(voiceOptions).length)try{synth.set(voiceOptions)}catch{}
+    synth.maxPolyphony=16;
+    return synth;
   }
   return new C(opts||{});
 }
