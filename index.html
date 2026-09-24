@@ -12,58 +12,74 @@
 <script src="https://cdn.jsdelivr.net/npm/@magenta/music@1.23.1/es6/onsets_frames.js?raw=1"></script>
 </head>
 <body>
-<div class="noise"></div>
-<header><a class="brand" href="#"><b>MX</b><span>Melodix</span></a><nav><a href="#generator">Studio</a><a href="#features">How it works</a><a href="https://github.com/reqeuss/Melodix" target="_blank" rel="noreferrer">GitHub ↗</a></nav></header>
+<div class="ambient ambient-a"></div><div class="ambient ambient-b"></div><div class="grain"></div>
+<header class="topbar">
+  <a class="brand" href="#"><span class="brand-mark">M</span><span>MELODIX</span><small>STUDIO</small></a>
+  <div class="top-status"><span class="live-dot"></span> BROWSER AI <b>ONLINE</b></div>
+  <nav><a href="#generator">Studio</a><a href="#features">Engine</a><a href="https://github.com/reqeuss/Melodix" target="_blank" rel="noreferrer">GitHub ↗</a></nav>
+</header>
 <main id="generator">
-<section class="hero">
-<div class="eyebrow"><i></i> AI MUSIC STUDIO <span>DEEP AI</span></div>
-<h1>Tu pars d'un son.<br><em>Ou de rien.</em></h1>
-<p>Deux moteurs, une même sortie : MIDI multi-pistes, arrangement complet et aperçu audio. Melodix peut maintenant raisonner sur des blocs musicaux de 16 mesures avant de construire l'arrangement final.</p>
-<div class="hero-pills"><span>AUDIO → MIDI</span><span>AI COMPOSITION</span><span>MULTI-TRACK</span><span>ZIP EXPORT</span></div>
+<section class="hero-v2">
+  <div class="hero-copy"><div class="eyebrow">GENERATIVE MUSIC WORKSTATION <span>v2</span></div>
+  <h1>MAKE MUSIC.<br><em>YOUR WAY.</em></h1>
+  <p>Transforme un son en arrangement MIDI ou construis une instrumentale complète depuis zéro.</p>
+  <div class="hero-meta"><span>◉ 100% BROWSER</span><span>◈ MULTI-TRACK MIDI</span><span>✦ DEEP GENERATION</span></div></div>
+  <div class="hero-orb"><div class="orb-core">MX</div><i></i><i></i><i></i></div>
 </section>
-
 <section class="mode-switch" aria-label="Mode de création">
-<button class="mode-card active" id="modeReference" type="button"><strong>01 · ANALYSER</strong><b>J'ai un son</b><span>Importe MP3/WAV → analyse → reconstruction MIDI</span></button>
-<button class="mode-card" id="modeImagine" type="button"><strong>02 · IMAGINER</strong><b>Je pars de rien</b><span>IA musicale → composition → arrangement complet</span></button>
+<button class="mode-card active" id="modeReference" type="button"><span class="mode-no">01</span><strong>ANALYSER</strong><b>J'AI UN SON</b><small>Importe une référence et reconstruis son langage musical.</small></button>
+<button class="mode-card" id="modeImagine" type="button"><span class="mode-no">02</span><strong>IMAGINER</strong><b>JE PARS DE RIEN</b><small>Laisse l'IA composer une production multi-pistes.</small></button>
 </section>
-
-<section class="workspace">
-<aside class="panel reference" id="referencePanel">
-<div class="head"><i>01</i><div><small>SOURCE AUDIO</small><h2>Référence</h2></div></div>
-<label class="drop" id="drop"><input id="file" type="file" accept="audio/*"><div class="upload-icon">＋</div><strong id="fileName">Dépose ton morceau</strong><span>MP3 · WAV · OGG · M4A</span><audio id="player" controls hidden></audio></label>
-<div class="empty-note">L'audio reste dans ton navigateur pour l'analyse disponible côté client.</div>
-<div class="stats"><div><small>DURÉE</small><b id="duration">—</b></div><div><small>FORMAT</small><b id="format">—</b></div><div><small>ÉTAT</small><b id="refState">AUTO</b></div></div>
-<div class="analysis" id="analysis"><div><small>IA ANALYSE</small><b id="analysisText">En attente d'une référence</b></div><span id="analysisBadge">WAIT</span></div>
-<button class="ghost" id="clearRef" type="button">× Retirer la référence</button>
+<section class="studio-grid">
+<aside class="side-stack">
+<section class="panel source-panel">
+<div class="panel-title"><span>01 / SOURCE</span><b>REFERENCE</b></div>
+<label class="drop" id="drop"><input id="file" type="file" accept="audio/*"><div class="drop-art"><span>＋</span></div><strong id="fileName">Dépose ton audio</strong><small>MP3 · WAV · OGG · M4A</small><audio id="player" controls hidden></audio></label>
+<div class="source-stats"><div><span>DURATION</span><b id="duration">—</b></div><div><span>FORMAT</span><b id="format">—</b></div><div><span>STATE</span><b id="refState">AUTO</b></div></div>
+<div class="ai-state"><span class="pulse"></span><div><small>ANALYSIS ENGINE</small><b id="analysisText">En attente d'une référence</b></div><strong id="analysisBadge">WAIT</strong></div>
+<button class="text-button" id="clearRef" type="button">× Retirer la référence</button>
+</section>
+<section class="panel quick-panel">
+<div class="panel-title"><span>QUICK CONTROLS</span><b>OUTPUT</b></div>
+<div class="quick-grid"><button type="button" class="quick" data-style="Rap">RAP</button><button type="button" class="quick" data-style="Drill">DRILL</button><button type="button" class="quick" data-style="Hyperpop">HYPERPOP</button><button type="button" class="quick" data-style="R&B">R&B</button></div>
+</section>
 </aside>
-
-<section class="panel controls">
-<div class="head"><i>02</i><div><small id="controlEyebrow">COMPOSITION</small><h2 id="controlTitle">Direction</h2></div></div>
-<div class="pipeline" id="pipeline"><span class="active">Audio</span><i>→</i><span>Analyse</span><i>→</i><span>MIDI</span><i>→</i><span>Instru</span></div>
-<div class="grid2"><label>Style<select id="style"><option>Rap</option><option>Drill</option><option>Trap</option><option>Hyperpop</option><option>R&B</option><option>Pop</option><option>Phonk</option><option>Hard Techno</option><option>Lo-fi</option><option>Rock</option><option>Experimental</option></select></label><label>Sous-style<select id="substyle"><option>Auto</option><option>Dark</option><option>Melodic</option><option>Classic</option><option>Modern</option><option>Atmospheric</option></select></label></div>
-<div class="grid2"><label>Ambiance<select id="mood"><option>Mélancolique</option><option>Dark</option><option>Énergique</option><option>Planante</option><option>Kawaii</option><option>Épique</option><option>Joyeuse</option></select></label><label>BPM<input id="bpm" type="number" min="60" max="200" value="140"></label></div>
-<div class="grid2"><label>Durée<select id="bars"><option value="16">16 mesures · court</option><option value="32" selected>32 mesures · standard</option><option value="64">64 mesures · long</option><option value="96">96 mesures · extended</option></select></label><label>Seed <span class="seed-row"><input id="seed" value="melodix-01" maxlength="40"><button id="randomSeed" type="button">🎲</button></span></label></div>
-<div id="imagineControls"><label>Énergie <output id="energyOut">70%</output><input id="energy" type="range" min="10" max="100" value="70"></label><label>Complexité <output id="complexityOut">65%</output><input id="complexity" type="range" min="10" max="100" value="65"></label></div>
-<div class="section-title">ARRANGEMENT · DEEP CONTEXT</div>
+<section class="panel composer-panel">
+<div class="composer-top"><div><div class="panel-kicker">02 / COMPOSE</div><h2>Build your sound</h2></div><div class="pipeline" id="pipeline"><span class="active">Audio</span><i>→</i><span>Analyse</span><i>→</i><span>MIDI</span><i>→</i><span>Instru</span></div></div>
+<div class="control-grid">
+<label>STYLE<select id="style"><option>Rap</option><option>Drill</option><option>Trap</option><option>Hyperpop</option><option>R&B</option><option>Pop</option><option>Phonk</option><option>Hard Techno</option><option>Lo-fi</option><option>Rock</option><option>Experimental</option></select></label>
+<label>SUB-STYLE<select id="substyle"><option>Auto</option><option>Dark</option><option>Melodic</option><option>Classic</option><option>Modern</option><option>Atmospheric</option></select></label>
+<label>MOOD<select id="mood"><option>Mélancolique</option><option>Dark</option><option>Énergique</option><option>Planante</option><option>Kawaii</option><option>Épique</option><option>Joyeuse</option></select></label>
+<label>BPM<input id="bpm" type="number" min="60" max="200" value="140"></label>
+<label>DURATION<select id="bars"><option value="16">16 mesures</option><option value="32" selected>32 mesures</option><option value="64">64 mesures</option><option value="96">96 mesures</option></select></label>
+<label>SEED<span class="seed-line"><input id="seed" value="melodix-01" maxlength="40"><button id="randomSeed" type="button">⤨</button></span></label>
+</div>
+<div id="imagineControls" class="range-zone">
+<label>ÉNERGIE <output id="energyOut">70%</output><input id="energy" type="range" min="10" max="100" value="70"></label>
+<label>COMPLEXITÉ <output id="complexityOut">65%</output><input id="complexity" type="range" min="10" max="100" value="65"></label>
+</div>
+<div class="section-title">ARRANGEMENT</div>
 <div class="checks"><label><input id="intro" type="checkbox" checked><span>Intro</span></label><label><input id="variations" type="checkbox" checked><span>Variations</span></label><label><input id="outro" type="checkbox" checked><span>Outro</span></label><label><input id="counter" type="checkbox" checked><span>Counter melody</span></label><label><input id="arp" type="checkbox" checked><span>Arp / texture</span></label><label><input id="fills" type="checkbox" checked><span>Drum fills</span></label></div>
-<div class="recommend"><div class="recommend-title">✦ PALETTE IA</div><div id="instrumentAdvice"></div></div>
-<button class="generate" id="generate" type="button"><span>✦</span> ANALYSER & CRÉER <kbd>ENTER</kbd></button>
+<div class="recommend"><div class="recommend-title">✦ AI PALETTE</div><div id="instrumentAdvice"></div></div>
+<button class="generate" id="generate" type="button"><span>GENERATE INSTRUMENTAL</span><kbd>ENTER ↵</kbd></button>
 </section>
-
 <section class="panel output-panel">
-<div class="head output-head"><div><i>03</i><div><small>AI RESULT</small><h2>Création</h2></div></div><span id="statusBadge">READY</span></div>
-<div class="empty-output" id="emptyOutput"><div>♫</div><b>Le studio attend ton idée</b><span>Choisis « Analyser » avec un audio ou « Imaginer » pour partir de zéro.</span></div>
+<div class="output-top"><div><div class="panel-kicker">03 / PLAYBACK</div><h2>Your session</h2></div><span id="statusBadge">READY</span></div>
+<div class="empty-output" id="emptyOutput"><div class="empty-logo">♪</div><b>Nothing here yet</b><span>Choisis un mode et lance une génération.</span></div>
 <div class="result" id="result" hidden>
-<div class="transport"><button id="playPreview" type="button">▶</button><div class="transport-info"><b id="transportTitle">Melodix composition</b><span id="previewMeta">32 mesures · 140 BPM</span></div><div class="transport-meter"><span id="playTime">00:00</span><div><i id="transportFill"></i></div></div></div>
-<div class="section-title preview-title">ARRANGEMENT / MIDI</div><div class="piano" id="timeline"></div><div class="track-list" id="tracks"></div>
-<div class="result-actions"><button class="secondary primary-download" id="all" disabled>↓ TÉLÉCHARGER L'INSTRUMENTALE</button><button class="secondary zip-download" id="zip" disabled>▣ ZIP — TOUS LES MIDI</button><button class="secondary" id="regen" type="button">↻ Régénérer</button></div>
-<div class="mini-downloads"><span>Tracks séparées</span><div id="trackDownloads"></div></div>
+<div class="player-shell">
+  <div class="player-main"><button id="playPreview" class="play-button" type="button">▶</button><div class="now"><small>NOW PLAYING</small><b id="transportTitle">Melodix composition</b><span id="previewMeta">32 mesures · 140 BPM</span></div><div class="time"><b id="playTime">00:00</b><span id="playerDuration">00:00</span></div></div>
+  <div class="seek"><i id="transportFill"></i></div>
+  <div class="player-tools"><label><span>MASTER</span><input id="masterVolume" type="range" min="-24" max="6" value="0"></label><label><span>REVERB</span><input id="reverbAmount" type="range" min="0" max="100" value="18"></label><label><span>DRUMS</span><input id="drumVolume" type="range" min="-24" max="6" value="0"></label><label><span>MUSIC</span><input id="musicVolume" type="range" min="-24" max="6" value="0"></label><button id="mutePreview" type="button">MUTE</button></div>
+</div>
+<div class="section-title preview-title">MIDI ARRANGEMENT</div><div class="piano" id="timeline"></div><div class="track-list" id="tracks"></div>
+<div class="result-actions"><button class="secondary primary-download" id="all" disabled>↓ EXPORT FULL MIDI</button><button class="secondary zip-download" id="zip" disabled>▣ ZIP · STEMS</button><button class="secondary" id="regen" type="button">↻ REGENERATE</button></div>
+<div class="mini-downloads"><span>INDIVIDUAL TRACKS</span><div id="trackDownloads"></div></div>
 </div>
 </section>
 </section>
-
-<section id="features" class="features"><article><b>01</b><h3>Analyser</h3><p>Une référence audio devient une représentation musicale exploitable : tempo, tonalité, énergie et notes détectées côté navigateur.</p></article><article><b>02</b><h3>Imaginer</h3><p>Sans fichier, le moteur génératif construit une composition complète avec batterie, 808, harmonie, mélodie et textures.</p></article><article><b>03</b><h3>Recréer</h3><p>Le résultat est organisé en pistes MIDI séparées et exportable en un seul pack ZIP.</p></article></section>
+<section id="features" class="features"><div><span>01</span><h3>ANALYSE</h3><p>Référence audio → transcription musicale → arrangement MIDI.</p></div><div><span>02</span><h3>IMAGINE</h3><p>Composition générative avec harmonie, batterie, basse et textures.</p></div><div><span>03</span><h3>EXPORT</h3><p>Une session complète, des pistes séparées et un pack ZIP.</p></div></section>
 </main>
-<footer><span>Melodix <b>AI music studio</b></span><span>Open source · Reqeuss</span></footer>
+<footer><b>MELODIX / AI MUSIC STUDIO</b><span>Open source · Reqeuss</span></footer>
 <script src="app.js"></script>
 </body></html>
