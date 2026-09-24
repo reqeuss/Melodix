@@ -414,94 +414,111 @@ function zipStore(files){const enc=new TextEncoder(),local=[],central=[];let off
 function downloadZip(){const files=Object.entries(state.generated).filter(([id])=>id!=='full').map(([id,d])=>({name:'midi/melodix-'+id+'.mid',data:d.midi}));files.push({name:'melodix-instrumentale-full.mid',data:state.generated.full.midi});downloadBlob('melodix-midi-pack.zip',zipStore(files),'application/zip')}
 async function loadReference(f){if(!f||!f.type.startsWith('audio/'))return;if(state.reference?.url)URL.revokeObjectURL(state.reference.url);const url=URL.createObjectURL(f);state.reference={url};$('#player').src=url;$('#player').hidden=false;$('#fileName').textContent=f.name;$('#format').textContent=(f.name.split('.').pop()||'AUDIO').toUpperCase();$('#refState').textContent='READY';$('#player').onloadedmetadata=()=>$('#duration').textContent=Number.isFinite($('#player').duration)?fmt($('#player').duration):'—';await inspectReference(f)}
 function fmt(s){return Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0')}
-const soundfontProfiles={
-  Rap:{chords:'electric_piano_1',melody:'acoustic_grand_piano',counter:'acoustic_guitar_steel',arp:'lead_1_square'},
-  Drill:{chords:'acoustic_grand_piano',melody:'electric_piano_1',counter:'acoustic_guitar_nylon',arp:'pad_2_warm'},
-  Trap:{chords:'electric_piano_1',melody:'acoustic_grand_piano',counter:'electric_guitar_clean',arp:'lead_2_sawtooth'},
-  Hyperpop:{chords:'electric_piano_1',melody:'lead_2_sawtooth',counter:'electric_guitar_clean',arp:'lead_1_square'},
-  'R&B':{chords:'electric_piano_1',melody:'acoustic_grand_piano',counter:'acoustic_guitar_nylon',arp:'pad_2_warm'},
-  Pop:{chords:'acoustic_grand_piano',melody:'electric_piano_1',counter:'acoustic_guitar_steel',arp:'string_ensemble_1'},
-  Phonk:{chords:'electric_piano_1',melody:'acoustic_grand_piano',counter:'electric_guitar_muted',arp:'lead_8_bass__lead'},
-  'Hard Techno':{chords:'synth_strings_1',melody:'lead_2_sawtooth',counter:'lead_1_square',arp:'lead_8_bass__lead'},
-  'Lo-fi':{chords:'electric_piano_1',melody:'acoustic_grand_piano',counter:'acoustic_guitar_nylon',arp:'music_box'},
-  Rock:{chords:'distortion_guitar',melody:'electric_guitar_clean',counter:'acoustic_guitar_steel',arp:'overdriven_guitar'},
-  Experimental:{chords:'electric_piano_1',melody:'lead_8_bass__lead',counter:'electric_guitar_clean',arp:'fx_1_rain'}
+const synthProfiles={
+  Rap:{chord:["FMSynth",{harmonicity:1.5,modulationIndex:3,volume:-13}],melody:["Synth",{oscillator:{type:"triangle"},envelope:{attack:.01,decay:.16,sustain:.35,release:.22},volume:-10}],counter:["AMSynth",{volume:-17}],arp:["PluckSynth",{attackNoise:.35,dampening:.72,resonance:.82,volume:-15}]},
+  Drill:{chord:["PolySynth",{voice:"Synth",options:{oscillator:{type:"triangle"},envelope:{attack:.01,decay:.22,sustain:.28,release:.45},volume:-15}}],melody:["FMSynth",{harmonicity:2,modulationIndex:7,volume:-13}],counter:["AMSynth",{volume:-20}],arp:["PluckSynth",{volume:-17}]},
+  Trap:{chord:["PolySynth",{voice:"Synth",options:{oscillator:{type:"sawtooth"},envelope:{attack:.02,decay:.25,sustain:.32,release:.5},volume:-16}}],melody:["FMSynth",{harmonicity:1.5,modulationIndex:5,volume:-12}],counter:["Synth",{oscillator:{type:"square"},volume:-20}],arp:["PluckSynth",{volume:-16}]},
+  Hyperpop:{chord:["PolySynth",{voice:"Synth",options:{oscillator:{type:"sawtooth"},envelope:{attack:.01,decay:.2,sustain:.5,release:.4},volume:-18}}],melody:["PolySynth",{voice:"FMSynth",options:{harmonicity:2,modulationIndex:8,volume:-15}}],counter:["AMSynth",{volume:-19}],arp:["PluckSynth",{volume:-15}]},
+  "R&B":{chord:["PolySynth",{voice:"Synth",options:{oscillator:{type:"triangle"},envelope:{attack:.05,decay:.5,sustain:.45,release:1.1},volume:-15}}],melody:["FMSynth",{harmonicity:1.5,modulationIndex:2,volume:-14}],counter:["AMSynth",{volume:-19}],arp:["PluckSynth",{volume:-18}]},
+  Pop:{chord:["PolySynth",{voice:"Synth",options:{oscillator:{type:"triangle"},envelope:{attack:.03,decay:.3,sustain:.5,release:.7},volume:-15}}],melody:["Synth",{oscillator:{type:"sine"},envelope:{attack:.01,decay:.18,sustain:.5,release:.35},volume:-11}],counter:["FMSynth",{harmonicity:2,modulationIndex:3,volume:-19}],arp:["PluckSynth",{volume:-17}]},
+  Phonk:{chord:["PolySynth",{voice:"Synth",options:{oscillator:{type:"square"},envelope:{attack:.01,decay:.25,sustain:.3,release:.45},volume:-18}}],melody:["FMSynth",{harmonicity:2,modulationIndex:9,volume:-12}],counter:["AMSynth",{volume:-20}],arp:["PluckSynth",{volume:-15}]},
+  "Hard Techno":{chord:["PolySynth",{voice:"Synth",options:{oscillator:{type:"sawtooth"},envelope:{attack:.005,decay:.12,sustain:.7,release:.2},volume:-20}}],melody:["MonoSynth",{oscillator:{type:"sawtooth"},envelope:{attack:.005,decay:.12,sustain:.5,release:.12},volume:-12}],counter:["AMSynth",{volume:-20}],arp:["MonoSynth",{oscillator:{type:"square"},envelope:{attack:.005,decay:.08,sustain:.3,release:.1},volume:-18}]},
+  "Lo-fi":{chord:["PolySynth",{voice:"Synth",options:{oscillator:{type:"triangle"},envelope:{attack:.08,decay:.5,sustain:.5,release:1.2},volume:-17}}],melody:["FMSynth",{harmonicity:1.5,modulationIndex:2,volume:-14}],counter:["AMSynth",{volume:-21}],arp:["PluckSynth",{volume:-19}]},
+  Rock:{chord:["PolySynth",{voice:"Synth",options:{oscillator:{type:"sawtooth"},envelope:{attack:.01,decay:.18,sustain:.55,release:.35},volume:-18}}],melody:["MonoSynth",{oscillator:{type:"square"},envelope:{attack:.01,decay:.15,sustain:.5,release:.25},volume:-12}],counter:["FMSynth",{harmonicity:1,modulationIndex:2,volume:-19}],arp:["PluckSynth",{volume:-18}]},
+  Experimental:{chord:["PolySynth",{voice:"Synth",options:{oscillator:{type:"fatsawtooth",spread:25,count:3},envelope:{attack:.03,decay:.35,sustain:.45,release:.8},volume:-20}}],melody:["FMSynth",{harmonicity:3,modulationIndex:10,volume:-14}],counter:["AMSynth",{volume:-21}],arp:["PluckSynth",{volume:-16}]}
 };
-function getSoundfontMap(){return soundfontProfiles[$('#style').value]||soundfontProfiles.Rap}
-async function getSoundfontInstrument(name){
-  if(!state.audioCtx)throw new Error('AudioContext unavailable');
-  if(state.players[name])return state.players[name];
-  const p=await Soundfont.instrument(state.audioCtx,name,{soundfont:'MusyngKite',format:'mp3',gain:0.9});
-  state.players[name]=p;return p;
+
+state.tone={ready:false,tracks:[],drums:[],bass:null,master:null};
+
+function disposeTonePlayer(){
+  if(!window.Tone)return;
+  try{Tone.getTransport().stop();Tone.getTransport().cancel(0)}catch{}
+  for(const x of state.tone.tracks||[])try{x.dispose()}catch{}
+  for(const x of state.tone.drums||[])try{x.dispose()}catch{}
+  if(state.tone.bass)try{state.tone.bass.dispose()}catch{}
+  if(state.tone.master)try{state.tone.master.dispose()}catch{}
+  state.tone={ready:false,tracks:[],drums:[],bass:null,master:null};
 }
-async function playSampledTrack(track,bpm){
-  const map=getSoundfontMap(),name=map[track];if(!name)return;
-  const p=await getSoundfontInstrument(name);
-  const now=state.audioCtx.currentTime+.12,secTick=60/bpm/480;
-  for(const n of state.notes.filter(x=>x.track===track)){
-    const when=now+n.t*secTick,dur=Math.max(.045,n.d*secTick);
-    try{p.play(n.p,when,{duration:dur,gain:Math.min(.9,(n.v||80)/112)})}catch(e){console.warn(track,e)}
+
+function makeToneSynth(type,opts){
+  const C=Tone[type];
+  if(!C)throw new Error("Tone instrument unavailable: "+type);
+  if(type==="PolySynth")return new C(opts.voice||"Synth",opts.options||{});
+  return new C(opts||{});
+}
+
+async function prepareTonePlayer(){
+  if(!window.Tone)throw new Error("Tone.js unavailable");
+  await Tone.start();
+  const transport=Tone.getTransport();
+  transport.stop();transport.cancel(0);
+  disposeTonePlayer();
+  const style=$('#style').value;
+  const profile=synthProfiles[style]||synthProfiles.Rap;
+  const master=new Tone.Gain(.82).toDestination();
+  const comp=new Tone.Compressor({threshold:-18,ratio:3,attack:.01,release:.12}).connect(master);
+  state.tone.master=master;
+  const tracks=[];
+  for(const id of ['chords','melody','counter','arp']){
+    const [type,opts]=profile[id==="chords"?"chord":id];
+    const synth=makeToneSynth(type,opts);
+    synth.connect(comp);
+    tracks.push(synth);
   }
+  const bass=new Tone.MonoSynth({
+    oscillator:{type:style==="Hard Techno"?"sawtooth":"sine"},
+    filter:{type:"lowpass",frequency:260,Q:1.2},
+    envelope:{attack:.005,decay:.12,sustain:.58,release:.18},
+    filterEnvelope:{attack:.001,decay:.09,sustain:.25,release:.16,baseFrequency:55,octaves:2.8},
+    volume:-7
+  }).connect(comp);
+  state.tone.tracks=tracks;state.tone.bass=bass;
+  const kick=new Tone.MembraneSynth({pitchDecay:.025,octaves:5,envelope:{attack:.001,decay:.22,sustain:0,release:.08},volume:-5}).connect(comp);
+  const snare=new Tone.NoiseSynth({noise:{type:"white"},envelope:{attack:.001,decay:.09,sustain:0,release:.035},volume:-12}).connect(comp);
+  const hat=new Tone.MetalSynth({frequency:210,envelope:{attack:.001,decay:.035,release:.025},harmonicity:5.1,modulationIndex:32,resonance:3000,volume:-19}).connect(comp);
+  const clap=new Tone.NoiseSynth({noise:{type:"pink"},envelope:{attack:.001,decay:.12,sustain:0,release:.03},volume:-16}).connect(comp);
+  state.tone.drums=[kick,snare,hat,clap];
+  state.tone.ready=true;
+  return {transport,tracks,bass,kick,snare,hat,clap};
 }
-async function playDrumSoundfont(bpm){
-  const p=await getSoundfontInstrument('percussion');
-  const now=state.audioCtx.currentTime+.12,secTick=60/bpm/480;
-  for(const n of state.notes.filter(x=>x.track==='drums')){
-    try{p.play(n.p,now+n.t*secTick,{duration:Math.max(.04,n.d*secTick),gain:Math.min(.9,(n.v||80)/115)})}catch(e){console.warn('drums',e)}
+
+function noteName(midi){return Tone.Frequency(Math.max(0,Math.min(127,midi)),"midi").toNote()}
+function scheduleTonePreview(bpm,bars){
+  const {transport,tracks,bass,kick,snare,hat,clap}=state.tone;
+  transport.bpm.value=bpm;transport.timeSignature=4;transport.position=0;
+  const secPerTick=60/bpm/480;
+  const beatTicks=480;
+  const grouped={chords:0,melody:1,counter:2,arp:3};
+  for(const n of state.notes){
+    const at=Math.max(0,n.t*secPerTick);
+    const dur=Math.max(.04,n.d*secPerTick);
+    if(n.track==="bass"){bass.triggerAttackRelease(noteName(n.p),dur,at,Math.min(.95,(n.v||80)/110));continue}
+    if(n.track==="drums"){
+      const s=n.p===36?"kick":n.p===38||n.p===40?"snare":n.p===42||n.p===46?"hat":"clap";
+      const inst=s==="kick"?kick:s==="snare"?snare:s==="hat"?hat:clap;
+      inst.triggerAttackRelease(s==="hat"?"32n":"16n",at,Math.min(.9,(n.v||70)/115));
+      continue;
+    }
+    const synth=tracks[grouped[n.track]??1];
+    if(!synth)continue;
+    const velocity=Math.min(.85,(n.v||70)/110);
+    try{synth.triggerAttackRelease(noteName(n.p),dur,at,velocity)}catch(e){console.warn("preview note",e)}
   }
-}
-function play808Preview(bpm){
-  const c=state.audioCtx;if(!c)return;
-  const now=c.currentTime+.12,secTick=60/bpm/480;
-  for(const n of state.notes.filter(x=>x.track==='bass')){
-    const when=now+n.t*secTick,dur=Math.max(.08,n.d*secTick);
-    const o=c.createOscillator(),g=c.createGain(),f=c.createBiquadFilter();
-    const freq=Math.max(28,Math.min(120,440*Math.pow(2,(n.p-69)/12)));
-    o.type='sine';o.frequency.setValueAtTime(Math.min(95,freq*1.7),when);
-    o.frequency.exponentialRampToValueAtTime(freq,when+Math.min(.085,dur*.3));
-    f.type='lowpass';f.frequency.setValueAtTime(210,when);f.Q.value=.7;
-    g.gain.setValueAtTime(.0001,when);
-    g.gain.exponentialRampToValueAtTime(.66,when+.006);
-    g.gain.exponentialRampToValueAtTime(.2,when+Math.min(.16,dur*.4));
-    g.gain.exponentialRampToValueAtTime(.0001,when+dur);
-    o.connect(f).connect(g).connect(c.destination);o.start(when);o.stop(when+dur+.03);
-  }
-}
-async function playNativePreview(bpm){
-  const c=state.audioCtx;if(!c)throw new Error('AudioContext unavailable');
-  if(c.state!=='running')await c.resume();
-  if(c.state!=='running')throw new Error('AudioContext blocked by browser');
-  await Promise.all(['chords','melody','counter','arp'].map(t=>playSampledTrack(t,bpm)));
-  await playDrumSoundfont(bpm);
-  play808Preview(bpm);
+  transport.scheduleOnce(()=>stopPreview(),bars*4*60/bpm);
 }
 
 async function playPreview(){
-  if(!state.notes.length){
-    $('#statusBadge').textContent='NOTHING TO PLAY';
-    return;
-  }
-  state.playing=true;
-  $('#playPreview').textContent='■';
-  $('#statusBadge').textContent='LOADING PLAYER…';
+  if(!state.notes.length){$('#statusBadge').textContent='NOTHING TO PLAY';return}
+  if(state.playing){stopPreview();return}
   try{
-    // Browsers require audio to be resumed from the user's click.
-    // SoundFont uses this same native AudioContext.
-    if(!state.audioCtx){
-      const AC=window.AudioContext||window.webkitAudioContext;
-      if(!AC)throw new Error('Web Audio API unavailable');
-      state.audioCtx=new AC();
-    }
-    if(state.audioCtx.state!=='running')await state.audioCtx.resume();
-    if(state.audioCtx.state!=='running')throw new Error('AudioContext blocked');
+    state.playing=true;$('#playPreview').textContent='■';$('#statusBadge').textContent='STARTING AUDIO…';
     const bpm=Math.max(60,Math.min(200,+$('#bpm').value||140));
-    const bars=Math.max(1,+$('#bars').value||16);
+    const bars=Math.max(1,+$('#bars').value||32);
     const duration=bars*4*60/bpm;
-    $('#statusBadge').textContent='PLAYING';
-    $('#transportFill').style.width='0%';
-    $('#playTime').textContent='00:00';
-    await playNativePreview(bpm);
-    if(!state.playing)return;
+    const p=await prepareTonePlayer();
+    scheduleTonePreview(bpm,bars);
+    p.transport.start("+0.08");
+    $('#statusBadge').textContent='PLAYING';$('#playTime').textContent='00:00';$('#transportFill').style.width='0%';
     const started=performance.now();
     clearInterval(state.timer);
     state.timer=setInterval(()=>{
@@ -509,25 +526,22 @@ async function playPreview(){
       const elapsed=Math.min(duration,(performance.now()-started)/1000);
       $('#transportFill').style.width=Math.min(100,elapsed/duration*100)+'%';
       $('#playTime').textContent=fmt(elapsed);
-      if(elapsed>=duration){
-        stopPreview();
-        $('#statusBadge').textContent='GENERATED';
-      }
+      if(elapsed>=duration)stopPreview();
     },50);
   }catch(e){
-    console.error('Melodix preview:',e);
-    state.playing=false;
-    clearInterval(state.timer);state.timer=null;
-    Object.values(state.players).forEach(p=>{try{p.stop()}catch{}});
-    state.players={};
-    $('#playPreview').textContent='▶';
-    $('#statusBadge').textContent='PLAYER ERROR';
-    $('#playTime').textContent='00:00';
-    $('#transportFill').style.width='0%';
-    // Keep the error visible in the browser console without breaking MIDI export.
+    console.error("Melodix Tone player:",e);
+    state.playing=false;clearInterval(state.timer);state.timer=null;disposeTonePlayer();
+    $('#playPreview').textContent='▶';$('#statusBadge').textContent='PLAYER ERROR';
+    $('#playTime').textContent='00:00';$('#transportFill').style.width='0%';
   }
 }
-function stopPreview(){state.playing=false;clearInterval(state.timer);state.timer=null;Object.values(state.players).forEach(p=>{try{p.stop()}catch{}});state.players={};if(state.drumCtx){try{state.drumCtx.close()}catch{}state.drumCtx=null}if(state.audioCtx&&state.audioCtx.state==='running'){try{state.audioCtx.suspend()}catch{}}$('#playPreview').textContent='▶';$('#transportFill').style.width='0%';$('#playTime').textContent='00:00'}
+
+function stopPreview(){
+  state.playing=false;clearInterval(state.timer);state.timer=null;
+  disposeTonePlayer();
+  $('#playPreview').textContent='▶';$('#transportFill').style.width='0%';$('#playTime').textContent='00:00';
+}
+
 async function generate(){
   const btn=$('#generate');btn.disabled=true;stopPreview();
   $('#statusBadge').textContent='IA WEB…';$('#emptyOutput').hidden=false;$('#result').hidden=true;
