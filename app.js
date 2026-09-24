@@ -220,7 +220,8 @@ function setCreationMode(mode){
   $('#modeImagine')?.classList.toggle('active',!ref);
   $('#controlEyebrow')?.replaceChildren(document.createTextNode(ref?'AUDIO → MIDI':'AI COMPOSITION'));
   $('#controlTitle')?.replaceChildren(document.createTextNode(ref?'Analyse & reconstruction':'Imagine'));
-  $('#referencePanel')?.style && ($('#referencePanel').style.opacity=ref?'1':'.62');
+  const referencePanel=$('#referencePanel');
+  if(referencePanel) referencePanel.style.opacity=ref?'1':'.62';
   if($('#pipeline'))$('#pipeline').innerHTML=ref?'<span class="active">Audio</span><i>→</i><span>IA Analyse</span><i>→</i><span>MIDI</span><i>→</i><span>Instru</span>':'<span class="active">Seed</span><i>→</i><span>IA Imagine</span><i>→</i><span>Arrangement</span><i>→</i><span>Instru</span>';
   if($('#generate'))$('#generate').innerHTML=ref?'<span>✦</span> ANALYSER & CRÉER <kbd>ENTER</kbd>':'<span>✦</span> IMAGINER L\'INSTRUMENTALE <kbd>ENTER</kbd>';
   if($('#analysisText'))$('#analysisText').textContent=ref?(state.reference?'Référence prête · analyse musicale disponible':'En attente d\'une référence'):'Aucune référence nécessaire · moteur autonome';
