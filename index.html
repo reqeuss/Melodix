@@ -16,9 +16,9 @@
 <header><a class="brand" href="#"><b>MX</b><span>Melodix</span></a><nav><a href="#generator">Studio</a><a href="#features">How it works</a><a href="https://github.com/reqeuss/Melodix" target="_blank" rel="noreferrer">GitHub ↗</a></nav></header>
 <main id="generator">
 <section class="hero">
-<div class="eyebrow"><i></i> AI MUSIC STUDIO <span>WEB AI</span></div>
+<div class="eyebrow"><i></i> AI MUSIC STUDIO <span>DEEP AI</span></div>
 <h1>Tu pars d'un son.<br><em>Ou de rien.</em></h1>
-<p>Deux moteurs, une même sortie : MIDI multi-pistes, arrangement complet et aperçu audio. Importe une référence pour l'analyser, ou laisse Melodix imaginer une instru entièrement nouvelle.</p>
+<p>Deux moteurs, une même sortie : MIDI multi-pistes, arrangement complet et aperçu audio. Melodix peut maintenant raisonner sur des blocs musicaux de 16 mesures avant de construire l'arrangement final.</p>
 <div class="hero-pills"><span>AUDIO → MIDI</span><span>AI COMPOSITION</span><span>MULTI-TRACK</span><span>ZIP EXPORT</span></div>
 </section>
 
@@ -44,7 +44,7 @@
 <div class="grid2"><label>Ambiance<select id="mood"><option>Mélancolique</option><option>Dark</option><option>Énergique</option><option>Planante</option><option>Kawaii</option><option>Épique</option><option>Joyeuse</option></select></label><label>BPM<input id="bpm" type="number" min="60" max="200" value="140"></label></div>
 <div class="grid2"><label>Durée<select id="bars"><option value="16">16 mesures · court</option><option value="32" selected>32 mesures · standard</option><option value="64">64 mesures · long</option><option value="96">96 mesures · extended</option></select></label><label>Seed <span class="seed-row"><input id="seed" value="melodix-01" maxlength="40"><button id="randomSeed" type="button">🎲</button></span></label></div>
 <div id="imagineControls"><label>Énergie <output id="energyOut">70%</output><input id="energy" type="range" min="10" max="100" value="70"></label><label>Complexité <output id="complexityOut">65%</output><input id="complexity" type="range" min="10" max="100" value="65"></label></div>
-<div class="section-title">ARRANGEMENT</div>
+<div class="section-title">ARRANGEMENT · DEEP CONTEXT</div>
 <div class="checks"><label><input id="intro" type="checkbox" checked><span>Intro</span></label><label><input id="variations" type="checkbox" checked><span>Variations</span></label><label><input id="outro" type="checkbox" checked><span>Outro</span></label><label><input id="counter" type="checkbox" checked><span>Counter melody</span></label><label><input id="arp" type="checkbox" checked><span>Arp / texture</span></label><label><input id="fills" type="checkbox" checked><span>Drum fills</span></label></div>
 <div class="recommend"><div class="recommend-title">✦ PALETTE IA</div><div id="instrumentAdvice"></div></div>
 <button class="generate" id="generate" type="button"><span>✦</span> ANALYSER & CRÉER <kbd>ENTER</kbd></button>
