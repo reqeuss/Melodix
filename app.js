@@ -490,9 +490,17 @@ async function prepareTonePlayer(){
 
   for(const id of ['chords','melody','counter','arp']){
     const spec=profile[id==="chords"?"chord":id];
-    const synth=makeToneSynth(spec[0],spec[1]);
+    let synth;
+    try{
+      synth=makeToneSynth(spec[0],spec[1]);
+    }catch(err){
+      console.warn("Melodix synth fallback",id,spec[0],err);
+      synth=new Tone.PolySynth(Tone.Synth);
+      synth.set({oscillator:{type:"triangle"},envelope:{attack:.01,decay:.18,sustain:.35,release:.3}});
+    }
     synth.connect(comp);
-    if(id==="counter"||id==="arp")synth.volume.value+=3;
+    synth.volume.value=Math.max(-12,Math.min(-3,Number(synth.volume.value)||-8));
+    if(id==="counter"||id==="arp")synth.volume.value+=2;
     tracks.push(synth);
   }
 
