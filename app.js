@@ -443,66 +443,62 @@ function disposeTonePlayer(){
 function makeToneSynth(type,opts){
   const C=Tone[type];
   if(!C)throw new Error("Tone instrument unavailable: "+type);
-  if(type==="PolySynth")return new C(opts.voice||"Synth",opts.options||{});
+  if(type==="PolySynth")return new C(Tone.Synth,opts.options||{});
   return new C(opts||{});
 }
 
 async function prepareTonePlayer(){
   if(!window.Tone)throw new Error("Tone.js unavailable");
   await Tone.start();
-  const transport=Tone.getTransport();
-  transport.stop();transport.cancel(0);
+  if(Tone.getContext().state!=="running")throw new Error("AudioContext is not running");
   disposeTonePlayer();
-  const style=$('#style').value;
-  const profile=synthProfiles[style]||synthProfiles.Rap;
-  const master=new Tone.Gain(.82).toDestination();
-  const comp=new Tone.Compressor({threshold:-18,ratio:3,attack:.01,release:.12}).connect(master);
+  const style=$('#style').value, profile=synthProfiles[style]||synthProfiles.Rap;
+  const master=new Tone.Gain(.78).toDestination();
+  const comp=new Tone.Compressor(-18,3).connect(master);
   state.tone.master=master;
   const tracks=[];
   for(const id of ['chords','melody','counter','arp']){
-    const [type,opts]=profile[id==="chords"?"chord":id];
-    const synth=makeToneSynth(type,opts);
-    synth.connect(comp);
-    tracks.push(synth);
+    const spec=profile[id==="chords"?"chord":id];
+    const synth=makeToneSynth(spec[0],spec[1]);
+    synth.connect(comp); tracks.push(synth);
   }
   const bass=new Tone.MonoSynth({
-    oscillator:{type:style==="Hard Techno"?"sawtooth":"sine"},
-    filter:{type:"lowpass",frequency:260,Q:1.2},
-    envelope:{attack:.005,decay:.12,sustain:.58,release:.18},
-    filterEnvelope:{attack:.001,decay:.09,sustain:.25,release:.16,baseFrequency:55,octaves:2.8},
-    volume:-7
+    oscillator:{type:"sine"},
+    filter:{type:"lowpass",frequency:240,Q:1},
+    envelope:{attack:.004,decay:.14,sustain:.5,release:.16},
+    filterEnvelope:{attack:.001,decay:.08,sustain:.2,release:.12,baseFrequency:45,octaves:3},
+    volume:-5
   }).connect(comp);
-  state.tone.tracks=tracks;state.tone.bass=bass;
-  const kick=new Tone.MembraneSynth({pitchDecay:.025,octaves:5,envelope:{attack:.001,decay:.22,sustain:0,release:.08},volume:-5}).connect(comp);
-  const snare=new Tone.NoiseSynth({noise:{type:"white"},envelope:{attack:.001,decay:.09,sustain:0,release:.035},volume:-12}).connect(comp);
-  const hat=new Tone.MetalSynth({frequency:210,envelope:{attack:.001,decay:.035,release:.025},harmonicity:5.1,modulationIndex:32,resonance:3000,volume:-19}).connect(comp);
-  const clap=new Tone.NoiseSynth({noise:{type:"pink"},envelope:{attack:.001,decay:.12,sustain:0,release:.03},volume:-16}).connect(comp);
-  state.tone.drums=[kick,snare,hat,clap];
-  state.tone.ready=true;
-  return {transport,tracks,bass,kick,snare,hat,clap};
+  const kick=new Tone.MembraneSynth({pitchDecay:.02,octaves:5,envelope:{attack:.001,decay:.2,sustain:0,release:.05},volume:-4}).connect(comp);
+  const snare=new Tone.NoiseSynth({noise:{type:"white"},envelope:{attack:.001,decay:.08,sustain:0,release:.03},volume:-11}).connect(comp);
+  const hat=new Tone.MetalSynth({frequency:180,envelope:{attack:.001,decay:.025,release:.02},harmonicity:5.1,modulationIndex:28,resonance:2500,volume:-19}).connect(comp);
+  const clap=new Tone.NoiseSynth({noise:{type:"pink"},envelope:{attack:.001,decay:.1,sustain:0,release:.03},volume:-15}).connect(comp);
+  state.tone={ready:true,tracks,drums:[kick,snare,hat,clap],bass,master};
+  return {transport:Tone.getTransport(),tracks,bass,kick,snare,hat,clap};
 }
 
-function noteName(midi){return Tone.Frequency(Math.max(0,Math.min(127,midi)),"midi").toNote()}
 function scheduleTonePreview(bpm,bars){
   const {transport,tracks,bass,kick,snare,hat,clap}=state.tone;
-  transport.bpm.value=bpm;transport.timeSignature=4;transport.position=0;
   const secPerTick=60/bpm/480;
-  const beatTicks=480;
-  const grouped={chords:0,melody:1,counter:2,arp:3};
+  transport.stop();transport.cancel(0);transport.bpm.value=bpm;transport.timeSignature=4;transport.position=0;
   for(const n of state.notes){
-    const at=Math.max(0,n.t*secPerTick);
-    const dur=Math.max(.04,n.d*secPerTick);
-    if(n.track==="bass"){bass.triggerAttackRelease(noteName(n.p),dur,at,Math.min(.95,(n.v||80)/110));continue}
-    if(n.track==="drums"){
-      const s=n.p===36?"kick":n.p===38||n.p===40?"snare":n.p===42||n.p===46?"hat":"clap";
-      const inst=s==="kick"?kick:s==="snare"?snare:s==="hat"?hat:clap;
-      inst.triggerAttackRelease(s==="hat"?"32n":"16n",at,Math.min(.9,(n.v||70)/115));
-      continue;
-    }
-    const synth=tracks[grouped[n.track]??1];
-    if(!synth)continue;
-    const velocity=Math.min(.85,(n.v||70)/110);
-    try{synth.triggerAttackRelease(noteName(n.p),dur,at,velocity)}catch(e){console.warn("preview note",e)}
+    const at=Math.max(0,(Number(n.t)||0)*secPerTick);
+    const dur=Math.max(.03,(Number(n.d)||1)*secPerTick);
+    const v=Math.max(.05,Math.min(.9,(Number(n.v)||80)/127));
+    try{
+      if(n.track==="bass"){bass.triggerAttackRelease(noteName(n.p),dur,at,v);continue}
+      if(n.track==="drums"){
+        const p=Number(n.p);
+        if(p===36)kick.triggerAttackRelease("C1",dur,at,v);
+        else if(p===38||p===40)snare.triggerAttackRelease(dur,at,v);
+        else if(p===42||p===44||p===46)hat.triggerAttackRelease(dur,at,v);
+        else clap.triggerAttackRelease(dur,at,v);
+        continue;
+      }
+      const idx={chords:0,melody:1,counter:2,arp:3}[n.track];
+      const synth=tracks[idx??1];
+      synth.triggerAttackRelease(noteName(n.p),dur,at,v);
+    }catch(err){console.warn("Melodix note skipped",err)}
   }
   transport.scheduleOnce(()=>stopPreview(),bars*4*60/bpm);
 }
