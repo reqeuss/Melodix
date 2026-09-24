@@ -209,15 +209,31 @@ let creationMode='reference';
 let browserTranscriber=null;const TRANSCRIPTION_CHECKPOINT='https://storage.googleapis.com/magentadata/js/checkpoints/transcription/onsets_frames_uni_q2';async function transcribeReference(){if(!state.reference)throw new Error('Aucune référence');if(!window.transcription?.OnsetsAndFrames)throw new Error('Transcription IA indisponible');if(!browserTranscriber){browserTranscriber=new transcription.OnsetsAndFrames(TRANSCRIPTION_CHECKPOINT,180);await browserTranscriber.initialize()}const blob=await fetch(state.reference.url).then(r=>r.blob());return browserTranscriber.transcribeFromAudioFile(blob)}
 function setCreationMode(mode){creationMode=mode;const ref=mode==='reference';$('#modeReference')?.classList.toggle('active',ref);$('#modeImagine')?.classList.toggle('active',!ref);$('#referencePanel').style.opacity=ref?'1':'.62';$('#controlEyebrow').textContent=ref?'AUDIO → MIDI':'AI COMPOSITION';$('#controlTitle').textContent=ref?'Analyse & reconstruction':'Imagine';$('#pipeline').innerHTML=ref?'<span class="active">Audio</span><i>→</i><span>IA Analyse</span><i>→</i><span>MIDI</span><i>→</i><span>Instru</span>':'<span class="active">Seed</span><i>→</i><span>IA Imagine</span><i>→</i><span>Arrangement</span><i>→</i><span>Instru</span>';$('#generate').innerHTML=ref?'<span>✦</span> ANALYSER & CRÉER <kbd>ENTER</kbd>':'<span>✦</span> IMAGINER L\'INSTRUMENTALE <kbd>ENTER</kbd>';$('#analysisText').textContent=ref?(state.reference?'Référence prête · analyse musicale disponible':'En attente d\'une référence'):'Aucune référence nécessaire · moteur autonome';$('#analysisBadge').textContent=ref?(state.reference?'READY':'WAIT'):'AUTO'}
 let browserMusicAI=null;
-const BROWSER_AI_CHECKPOINT='https://storage.googleapis.com/magentadata/js/checkpoints/music_vae/trio_4bar';
+let browserMusicAIContextBars=0;
+const BROWSER_AI_CHECKPOINTS={
+  deep:'https://storage.googleapis.com/magentadata/js/checkpoints/music_vae/hierdec-trio_16bar',
+  fallback:'https://storage.googleapis.com/magentadata/js/checkpoints/music_vae/trio_4bar'
+};
 
 async function getBrowserMusicAI(){
-  if(browserMusicAI)return browserMusicAI;
+  const requestedBars=+$('#bars').value||32;
+  const wanted=requestedBars>=16?'deep':'fallback';
+  if(browserMusicAI && browserMusicAIContextBars>=(wanted==='deep'?16:4))return browserMusicAI;
   if(!window.music_vae?.MusicVAE)throw new Error('Magenta.js non chargé');
-  $('#statusBadge').textContent='CHARGEMENT IA WEB…';
-  $('#emptyOutput').innerHTML='<div>🧠</div><b>Chargement de l’IA musicale…</b><span>Le modèle est téléchargé une seule fois dans le navigateur.</span>';
-  browserMusicAI=new music_vae.MusicVAE(BROWSER_AI_CHECKPOINT);
-  await browserMusicAI.initialize();
+  $('#statusBadge').textContent=wanted==='deep'?'IA DEEP · 16 MESURES':'IA WEB · 4 MESURES';
+  $('#emptyOutput').innerHTML='<div>🧠</div><b>Chargement du cerveau musical…</b><span>Melodix prépare un modèle à long contexte directement dans ton navigateur.</span>';
+  try{
+    browserMusicAI=new music_vae.MusicVAE(BROWSER_AI_CHECKPOINTS[wanted]);
+    await browserMusicAI.initialize();
+    browserMusicAIContextBars=wanted==='deep'?16:4;
+  }catch(e){
+    if(wanted==='deep'){
+      console.warn('Long-context MusicVAE indisponible, fallback 4-bar:',e);
+      browserMusicAI=new music_vae.MusicVAE(BROWSER_AI_CHECKPOINTS.fallback);
+      await browserMusicAI.initialize();
+      browserMusicAIContextBars=4;
+    }else throw e;
+  }
   return browserMusicAI;
 }
 
@@ -318,36 +334,75 @@ async function composeWithBrowserAI(){
   const seed=$('#seed').value;
   const style=$('#style').value;
   if(window.tf?.random?.setSeed)tf.random.setSeed(hashSeedNumber(seed));
-  const blocks=Math.max(1,Math.ceil(bars/4));
-  const temperature=Math.max(.45,Math.min(1.15,.52+complexity/180));
-  // Several candidates per section: instead of stitching unrelated random loops,
-  // choose each block by continuity, density and style-aware scoring.
-  const samples=await model.sample(blocks*3,temperature);
-  const pool=makeAICandidatePool(samples,blocks);
+
+  // Long-context hierarchical generation:
+  // 16-bar neural ideas -> section planner -> continuity scoring -> full arrangement.
+  const contextBars=browserMusicAIContextBars||4;
+  const sections=Math.max(1,Math.ceil(bars/contextBars));
+  const temperature=Math.max(.38,Math.min(1.05,.44+complexity/170));
+  const candidateCount=sections>=4?2:3;
+  const samples=await model.sample(sections*candidateCount,temperature);
+
+  const candidates=[];
+  for(let i=0;i<samples.length;i++){
+    const section=Math.floor(i/candidateCount);
+    if(!candidates[section])candidates[section]=[];
+    candidates[section].push(samples[i]);
+  }
+
   const chosen=[];
   let previous=null;
-  for(let b=0;b<blocks;b++){
-    const candidates=pool[b]||[];
-    let best=candidates[0],bestScore=-Infinity;
-    for(const candidate of candidates){
-      const sc=scoreMusicCandidate(candidate,previous,style,complexity)+(hashSeedNumber(seed+'|'+b)%17)/100;
-      if(sc>bestScore){bestScore=sc;best=candidate}
+  const sectionNames=['intro','verse','pre','hook','verse2','break','hook2','outro'];
+  for(let i=0;i<sections;i++){
+    const pool=candidates[i]||[];
+    let best=pool[0],bestScore=-Infinity;
+    for(const candidate of pool){
+      const stats=sequenceStats(candidate);
+      let score=scoreMusicCandidate(candidate,previous,style,complexity);
+      const sectionName=sectionNames[Math.min(sectionNames.length-1,Math.floor(i*8/Math.max(1,sections)))];
+      // Global arrangement preferences: hooks need more density, breaks less.
+      if(sectionName.includes('hook'))score+=stats.density*0.9;
+      if(sectionName==='break')score-=stats.density*0.35;
+      score+=(hashSeedNumber(seed+'|deep|'+i+'|'+(candidate.notes?.length||0))%1000)/100000;
+      if(score>bestScore){bestScore=score;best=candidate}
     }
-    chosen.push(best||{notes:[],totalQuantizedSteps:64});
+    chosen.push(best||{notes:[],totalQuantizedSteps:contextBars*16});
     previous=sequenceStats(best||{notes:[]});
   }
-  const merged={notes:[],totalQuantizedSteps:blocks*64};
+
+  // Assemble sections without destroying the model's long-range material.
+  const merged={notes:[],totalQuantizedSteps:sections*contextBars*16};
   for(let i=0;i<chosen.length;i++){
-    for(const n of chosen[i].notes||[]){
-      const offset=i*64;
+    const section=chosen[i];
+    const offset=i*contextBars*16;
+    for(const n of section.notes||[]){
+      const qs=Number.isFinite(n.quantizedStartStep)?n.quantizedStartStep:0;
+      const qe=Number.isFinite(n.quantizedEndStep)?n.quantizedEndStep:qs+1;
+      if(qs>=contextBars*16)continue;
       merged.notes.push({
         ...n,
-        quantizedStartStep:(n.quantizedStartStep||0)+offset,
-        quantizedEndStep:(n.quantizedEndStep||0)+offset
+        quantizedStartStep:qs+offset,
+        quantizedEndStep:qe+offset
       });
     }
   }
-  $('#statusBadge').textContent='IA WEB · CHOIX MUSICAL';
+
+  // Add deterministic macro-level transformations so repeated sections evolve
+  // instead of becoming literal copies.
+  const macroRng=rng(seed+'|macro-arrangement');
+  const totalSteps=bars*16;
+  const trimmed=merged.notes.filter(n=>n.quantizedStartStep<totalSteps);
+  for(const n of trimmed){
+    const bar=Math.floor((n.quantizedStartStep||0)/16);
+    const section=Math.floor((bar/bars)*8);
+    if(!n.isDrum && section===3 && macroRng()<.14)n.pitch=Math.min(127,n.pitch+12);
+    if(!n.isDrum && section===5 && macroRng()<.22)n.pitch=Math.max(0,n.pitch-12);
+    if(n.isDrum && section===3 && macroRng()<.12)n.velocity=Math.min(127,(n.velocity||80)+12);
+  }
+  merged.notes=trimmed;
+  merged.totalQuantizedSteps=totalSteps;
+
+  $('#statusBadge').textContent=contextBars>=16?'IA DEEP · 16 MESURES':'IA WEB · 4 MESURES';
   return renderBrowserAISequence(merged,bars,bpm,energy,complexity);
 }
 
