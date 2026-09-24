@@ -659,3 +659,20 @@ async function generate(){
 if($('#modeReference'))$('#modeReference').onclick=()=>setCreationMode('reference');if($('#modeImagine'))$('#modeImagine').onclick=()=>setCreationMode('imagine');setCreationMode('reference');
 const seedButton=$('#randomSeed');if(seedButton)seedButton.onclick=()=>{$('#seed').value=randomSeed();$('#seed').focus()};if($('#seed').value==='melodix-01')$('#seed').value=randomSeed();
 const file=$('#file'),drop=$('#drop');file.onchange=e=>loadReference(e.target.files[0]);['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('drag')}));['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('drag')}));drop.addEventListener('drop',e=>loadReference(e.dataTransfer.files[0]));$('#clearRef').onclick=()=>{if(state.reference?.url)URL.revokeObjectURL(state.reference.url);state.reference=null;state.inspiration=null;file.value='';$('#player').removeAttribute('src');$('#player').load();$('#player').hidden=true;$('#fileName').textContent='Aucune référence';$('#duration').textContent='—';$('#format').textContent='—';$('#refState').textContent='AUTO';$('#analysisText').textContent='Aucune référence · moteur créatif autonome';$('#analysisBadge').textContent='AUTO'};$('#energy').oninput=e=>$('#energyOut').textContent=e.target.value+'%';$('#complexity').oninput=e=>$('#complexityOut').textContent=e.target.value+'%';$('#style').onchange=()=>{renderAdvice();renderTracks()};$('#generate').onclick=generate;$('#regen').onclick=generate;$('#playPreview').onclick=()=>state.playing?stopPreview():playPreview();$('#all').onclick=()=>downloadTrack('full');$('#zip').onclick=downloadZip;document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.activeElement.tagName!=='INPUT'&&document.activeElement.tagName!=='SELECT')generate()});renderAdvice();renderTracks();
+
+/* Studio v2 audio controls */
+const audioSettings={master:0,reverb:18,drums:0,music:0,muted:false};
+function bindAudioControls(){
+  const bind=(id,key)=>{const el=$('#'+id);if(!el)return;el.oninput=()=>{audioSettings[key]=+el.value;applyAudioSettings()}};
+  bind('masterVolume','master');bind('reverbAmount','reverb');bind('drumVolume','drums');bind('musicVolume','music');
+  const mute=$('#mutePreview');if(mute)mute.onclick=()=>{audioSettings.muted=!audioSettings.muted;mute.classList.toggle('active',audioSettings.muted);mute.textContent=audioSettings.muted?'UNMUTE':'MUTE';applyAudioSettings()};
+  document.querySelectorAll('.quick').forEach(b=>b.onclick=()=>{$('#style').value=b.dataset.style;$('#style').dispatchEvent(new Event('change'))});
+}
+function applyAudioSettings(){
+  if(!state.tone?.master)return;
+  state.tone.master.volume.value=audioSettings.muted?-60:audioSettings.master;
+  if(state.tone.drums)state.tone.drums.forEach(x=>x.volume.value=audioSettings.muted?-60:-3+audioSettings.drums);
+  if(state.tone.tracks)state.tone.tracks.forEach(x=>x.volume.value=audioSettings.muted?-60:audioSettings.music);
+  if(state.tone.bass)state.tone.bass.volume.value=audioSettings.muted?-60:-3+audioSettings.music;
+}
+bindAudioControls();
