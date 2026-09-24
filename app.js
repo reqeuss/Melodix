@@ -213,7 +213,19 @@ function compose(){
 }
 let creationMode='reference';
 let browserTranscriber=null;const TRANSCRIPTION_CHECKPOINT='https://storage.googleapis.com/magentadata/js/checkpoints/transcription/onsets_frames_uni_q2';async function transcribeReference(){if(!state.reference)throw new Error('Aucune référence');if(!window.transcription?.OnsetsAndFrames)throw new Error('Transcription IA indisponible');if(!browserTranscriber){browserTranscriber=new transcription.OnsetsAndFrames(TRANSCRIPTION_CHECKPOINT,180);await browserTranscriber.initialize()}const blob=await fetch(state.reference.url).then(r=>r.blob());return browserTranscriber.transcribeFromAudioFile(blob)}
-function setCreationMode(mode){creationMode=mode;const ref=mode==='reference';$('#modeReference')?.classList.toggle('active',ref);$('#modeImagine')?.classList.toggle('active',!ref);$('#referencePanel').style.opacity=ref?'1':'.62';$('#controlEyebrow').textContent=ref?'AUDIO → MIDI':'AI COMPOSITION';$('#controlTitle').textContent=ref?'Analyse & reconstruction':'Imagine';$('#pipeline').innerHTML=ref?'<span class="active">Audio</span><i>→</i><span>IA Analyse</span><i>→</i><span>MIDI</span><i>→</i><span>Instru</span>':'<span class="active">Seed</span><i>→</i><span>IA Imagine</span><i>→</i><span>Arrangement</span><i>→</i><span>Instru</span>';$('#generate').innerHTML=ref?'<span>✦</span> ANALYSER & CRÉER <kbd>ENTER</kbd>':'<span>✦</span> IMAGINER L\'INSTRUMENTALE <kbd>ENTER</kbd>';$('#analysisText').textContent=ref?(state.reference?'Référence prête · analyse musicale disponible':'En attente d\'une référence'):'Aucune référence nécessaire · moteur autonome';$('#analysisBadge').textContent=ref?(state.reference?'READY':'WAIT'):'AUTO'}
+function setCreationMode(mode){
+  creationMode=mode;
+  const ref=mode==='reference';
+  $('#modeReference')?.classList.toggle('active',ref);
+  $('#modeImagine')?.classList.toggle('active',!ref);
+  $('#controlEyebrow')?.replaceChildren(document.createTextNode(ref?'AUDIO → MIDI':'AI COMPOSITION'));
+  $('#controlTitle')?.replaceChildren(document.createTextNode(ref?'Analyse & reconstruction':'Imagine'));
+  $('#referencePanel')?.style && ($('#referencePanel').style.opacity=ref?'1':'.62');
+  if($('#pipeline'))$('#pipeline').innerHTML=ref?'<span class="active">Audio</span><i>→</i><span>IA Analyse</span><i>→</i><span>MIDI</span><i>→</i><span>Instru</span>':'<span class="active">Seed</span><i>→</i><span>IA Imagine</span><i>→</i><span>Arrangement</span><i>→</i><span>Instru</span>';
+  if($('#generate'))$('#generate').innerHTML=ref?'<span>✦</span> ANALYSER & CRÉER <kbd>ENTER</kbd>':'<span>✦</span> IMAGINER L\'INSTRUMENTALE <kbd>ENTER</kbd>';
+  if($('#analysisText'))$('#analysisText').textContent=ref?(state.reference?'Référence prête · analyse musicale disponible':'En attente d\'une référence'):'Aucune référence nécessaire · moteur autonome';
+  if($('#analysisBadge'))$('#analysisBadge').textContent=ref?(state.reference?'READY':'WAIT'):'AUTO';
+}
 let browserMusicAI=null;
 let browserMusicAIContextBars=0;
 const BROWSER_AI_CHECKPOINTS={
@@ -598,81 +610,3 @@ async function playPreview(){
     $('#playPreview').textContent='■';
 
     const bpm=Math.max(60,Math.min(200,+$('#bpm').value||140));
-    const bars=Math.max(1,+$('#bars').value||32);
-    const duration=bars*4*60/bpm;
-
-    await prepareTonePlayer();
-    scheduleTonePreview(bpm,bars);
-
-    $('#statusBadge').textContent='PLAYING';
-    $('#playTime').textContent='00:00';
-    $('#transportFill').style.width='0%';
-
-    const started=performance.now();
-    clearInterval(state.timer);
-    state.timer=setInterval(()=>{
-      if(!state.playing)return;
-      const elapsed=Math.min(duration,(performance.now()-started)/1000);
-      $('#transportFill').style.width=Math.min(100,elapsed/duration*100)+'%';
-      $('#playTime').textContent=fmt(elapsed);
-      if(elapsed>=duration)stopPreview();
-    },50);
-  }catch(e){
-    console.error("Melodix Tone player:",e);
-    state.playing=false;
-    clearInterval(state.timer);
-    state.timer=null;
-    disposeTonePlayer();
-    $('#playPreview').textContent='▶';
-    $('#statusBadge').textContent='PLAYER ERROR';
-    $('#playTime').textContent='00:00';
-    $('#transportFill').style.width='0%';
-  }
-}
-
-function stopPreview(){
-  state.playing=false;
-  clearInterval(state.timer);
-  state.timer=null;
-  disposeTonePlayer();
-  $('#playPreview').textContent='▶';
-  $('#transportFill').style.width='0%';
-  $('#playTime').textContent='00:00';
-}
-
-async function generate(){
-  const btn=$('#generate');btn.disabled=true;stopPreview();
-  $('#statusBadge').textContent='IA WEB…';$('#emptyOutput').hidden=false;$('#result').hidden=true;
-  $('#emptyOutput').innerHTML='<div>🧠</div><b>Composition musicale en cours…</b><span>IA + arrangement multi-couches + variations + instruments.</span>';
-  try{
-    if(creationMode==='reference'){try{const ns=await transcribeReference();state.generated=composeFromTranscription(ns)}catch(e){console.warn('Transcription IA:',e);state.generated=compose()}}else state.generated=await composeWithBrowserAI();
-  }catch(e){
-    console.warn('Melodix Browser AI unavailable:',e);
-    $('#statusBadge').textContent='MODE CRÉATIF';
-    $('#emptyOutput').innerHTML='<div>✦</div><b>IA Web indisponible · moteur de secours</b><span>La génération MIDI reste disponible.</span>';
-    state.generated=compose();
-  }
-  renderPreview();renderTracks();renderTrackDownloads();$('#result').hidden=false;$('#emptyOutput').hidden=true;
-  $('#all').disabled=false;$('#zip').disabled=false;btn.disabled=false;$('#statusBadge').textContent='GENERATED';$('#statusBadge').classList.add('done');
-  $('#transportTitle').textContent=$('#style').value+' · '+$('#mood').value+' · IA Web';
-}
-if($('#modeReference'))$('#modeReference').onclick=()=>setCreationMode('reference');if($('#modeImagine'))$('#modeImagine').onclick=()=>setCreationMode('imagine');setCreationMode('reference');
-const seedButton=$('#randomSeed');if(seedButton)seedButton.onclick=()=>{$('#seed').value=randomSeed();$('#seed').focus()};if($('#seed').value==='melodix-01')$('#seed').value=randomSeed();
-const file=$('#file'),drop=$('#drop');file.onchange=e=>loadReference(e.target.files[0]);['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('drag')}));['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('drag')}));drop.addEventListener('drop',e=>loadReference(e.dataTransfer.files[0]));$('#clearRef').onclick=()=>{if(state.reference?.url)URL.revokeObjectURL(state.reference.url);state.reference=null;state.inspiration=null;file.value='';$('#player').removeAttribute('src');$('#player').load();$('#player').hidden=true;$('#fileName').textContent='Aucune référence';$('#duration').textContent='—';$('#format').textContent='—';$('#refState').textContent='AUTO';$('#analysisText').textContent='Aucune référence · moteur créatif autonome';$('#analysisBadge').textContent='AUTO'};$('#energy').oninput=e=>$('#energyOut').textContent=e.target.value+'%';$('#complexity').oninput=e=>$('#complexityOut').textContent=e.target.value+'%';$('#style').onchange=()=>{renderAdvice();renderTracks()};$('#generate').onclick=generate;$('#regen').onclick=generate;$('#playPreview').onclick=()=>state.playing?stopPreview():playPreview();$('#all').onclick=()=>downloadTrack('full');$('#zip').onclick=downloadZip;document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.activeElement.tagName!=='INPUT'&&document.activeElement.tagName!=='SELECT')generate()});renderAdvice();renderTracks();
-
-/* Studio v2 audio controls */
-const audioSettings={master:0,reverb:18,drums:0,music:0,muted:false};
-function bindAudioControls(){
-  const bind=(id,key)=>{const el=$('#'+id);if(!el)return;el.oninput=()=>{audioSettings[key]=+el.value;applyAudioSettings()}};
-  bind('masterVolume','master');bind('reverbAmount','reverb');bind('drumVolume','drums');bind('musicVolume','music');
-  const mute=$('#mutePreview');if(mute)mute.onclick=()=>{audioSettings.muted=!audioSettings.muted;mute.classList.toggle('active',audioSettings.muted);mute.textContent=audioSettings.muted?'UNMUTE':'MUTE';applyAudioSettings()};
-  document.querySelectorAll('.quick').forEach(b=>b.onclick=()=>{$('#style').value=b.dataset.style;$('#style').dispatchEvent(new Event('change'))});
-}
-function applyAudioSettings(){
-  if(!state.tone?.master)return;
-  state.tone.master.volume.value=audioSettings.muted?-60:audioSettings.master;
-  if(state.tone.drums)state.tone.drums.forEach(x=>x.volume.value=audioSettings.muted?-60:-3+audioSettings.drums);
-  if(state.tone.tracks)state.tone.tracks.forEach(x=>x.volume.value=audioSettings.muted?-60:audioSettings.music);
-  if(state.tone.bass)state.tone.bass.volume.value=audioSettings.muted?-60:-3+audioSettings.music;
-}
-bindAudioControls();
